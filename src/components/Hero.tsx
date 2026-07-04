@@ -32,7 +32,7 @@ export default function Hero() {
         fill
         priority
         quality={100}
-        sizes="100vw"
+        sizes="50vw"
         className="landing-image"
       />
 
