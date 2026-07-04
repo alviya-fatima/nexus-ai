@@ -18,7 +18,6 @@ export default function Hero() {
 
       console.log("Login successful!");
 
-      // Redirect to dashboard
       router.push("/dashboard");
     } catch (err) {
       console.error("Google Login Error:", err);
@@ -27,7 +26,6 @@ export default function Hero() {
 
   return (
     <main className="landing-page">
-      {/* Background */}
       <Image
         src={landing}
         alt="NEXUS AI Landing Page"
@@ -38,7 +36,6 @@ export default function Hero() {
         className="landing-image"
       />
 
-      {/* Google Login Button */}
       <button
         onClick={signInWithGoogle}
         className="google-login"
@@ -49,6 +46,7 @@ export default function Hero() {
           alt="Continue with Google"
           width={320}
           height={70}
+          className="google-button-image"
         />
       </button>
     </main>
