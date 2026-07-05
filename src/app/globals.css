@@ -26,18 +26,21 @@ body{
   pointer-events:none;
 }
 
+/* ========================= */
 /* GOOGLE BUTTON */
+/* ========================= */
 
 .google-login{
   position:absolute;
 
-  left:7%;
-  bottom:10%;
+  top:35px;
+  left:35px;
 
   background:none;
   border:none;
   cursor:pointer;
 
+  z-index:1000;
   transition:.2s;
 }
 
@@ -46,53 +49,55 @@ body{
 }
 
 .google-button-image{
-  width:320px;
+  width:170px;
   height:auto;
+  display:block;
 }
 
+/* ========================= */
 /* TABLETS */
+/* ========================= */
 
 @media (max-width:1024px){
 
 .google-login{
-left:6%;
-bottom:8%;
+  top:28px;
+  left:28px;
 }
 
 .google-button-image{
-width:270px;
+  width:150px;
 }
 
 }
 
+/* ========================= */
 /* PHONES */
+/* ========================= */
 
 @media (max-width:768px){
 
 .google-login{
-left:50%;
-bottom:8%;
-transform:translateX(-50%);
-}
-
-.google-login:hover{
-transform:translateX(-50%) scale(1.05);
+  top:20px;
+  left:20px;
 }
 
 .google-button-image{
-width:240px;
+  width:130px;
 }
 
 }
 
+/* ========================= */
 /* DASHBOARD */
+/* ========================= */
 
 .dashboard-page{
   position:relative;
   width:100vw;
   height:100vh;
   overflow:hidden;
-  background:#c60a0a;
+  background:#000;
 }
 
 .dashboard-image{

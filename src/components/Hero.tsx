@@ -26,16 +26,18 @@ export default function Hero() {
 
   return (
     <main className="landing-page">
+      {/* Background */}
       <Image
         src={landing}
         alt="NEXUS AI Landing Page"
         fill
         priority
         quality={100}
-        sizes="50vw"
+        sizes="100vw"
         className="landing-image"
       />
 
+      {/* Google Button */}
       <button
         onClick={signInWithGoogle}
         className="google-login"
@@ -44,9 +46,10 @@ export default function Hero() {
         <Image
           src="/google-login-button.png"
           alt="Continue with Google"
-          width={320}
-          height={70}
+          width={170}
+          height={48}
           className="google-button-image"
+          priority
         />
       </button>
     </main>
