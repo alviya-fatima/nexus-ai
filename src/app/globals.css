@@ -146,3 +146,48 @@ body{
   width:220px;
   height:auto;
 }
+/* PROFILE */
+
+.profile-container{
+  position:absolute;
+
+  top:50%;
+  left:50%;
+
+  transform:translate(-50%,-50%);
+
+  display:flex;
+  flex-direction:column;
+
+  align-items:center;
+
+  gap:12px;
+
+  z-index:10;
+}
+
+/* PROFILE */
+
+.profile-container{
+  position:absolute;
+
+  top:50%;
+  left:50%;
+
+  transform:translate(-50%,-50%);
+
+  z-index:100;
+}
+
+.profile-picture{
+  width:140px;
+  height:140px;
+
+  border-radius:50%;
+
+  object-fit:cover;
+
+  border:4px solid #18F98F;
+
+  box-shadow:0 0 35px rgba(24,249,143,.45);
+}
