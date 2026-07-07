@@ -99,3 +99,50 @@ body{
   user-select:none;
   pointer-events:none;
 }
+.logout-button{
+  position:absolute;
+
+  left:40px;
+  bottom:40px;
+
+  padding:14px 30px;
+
+  border:none;
+  border-radius:12px;
+
+  background:#0d5c3d;
+  color:white;
+
+  cursor:pointer;
+
+  font-size:16px;
+  font-weight:600;
+
+  transition:.2s;
+}
+
+
+/* LOGOUT BUTTON */
+
+.logout-button{
+  position:absolute;
+
+  left:40px;
+  bottom:40px;
+
+  background:none;
+  border:none;
+
+  cursor:pointer;
+
+  transition:.2s;
+}
+
+.logout-button:hover{
+  transform:scale(1.05);
+}
+
+.logout-button-image{
+  width:220px;
+  height:auto;
+}

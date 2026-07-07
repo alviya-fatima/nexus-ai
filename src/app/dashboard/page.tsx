@@ -3,18 +3,46 @@
 import Image from "next/image";
 import dashboard from "../../assets/dashboard.png";
 
+import { auth } from "../firebase/config";
+import { signOut } from "firebase/auth";
+import { useRouter } from "next/navigation";
+
 export default function Dashboard() {
+  const router = useRouter();
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      router.push("/");
+    } catch (error) {
+      console.error("Logout Error:", error);
+    }
+  };
+
   return (
     <main className="dashboard-page">
       <Image
         src={dashboard}
-        alt="NEXUS AI Dashboard"
+        alt="Dashboard"
         fill
         priority
         quality={100}
-        sizes="100vw"
         className="dashboard-image"
       />
+
+      <button
+        onClick={logout}
+        className="logout-button"
+      >
+        <Image
+          src="/google-logout-btn.png"
+          alt="Logout"
+          width={220}
+          height={60}
+          priority
+          className="logout-button-image"
+        />
+      </button>
     </main>
   );
 }
