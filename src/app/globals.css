@@ -191,3 +191,61 @@ body{
 
   box-shadow:0 0 35px rgba(24,249,143,.45);
 }
+/* SEARCH BAR */
+
+.search-button{
+  position:absolute;
+
+  top:50%;
+  left:50%;
+
+  transform:translate(-50%,-50%);
+
+  background:none;
+  border:none;
+
+  cursor:pointer;
+
+  z-index:100;
+
+  transition:.2s;
+}
+
+.search-button:hover{
+  transform:translate(-50%,-50%) scale(1.02);
+}
+
+.search-bar-image{
+  width:500px;
+  height:auto;
+}
+/* PER GROWTH BUTTON */
+
+.per-growth-button{
+  position:absolute;
+
+  background:none;
+  border:none;
+  padding:0;
+
+  cursor:pointer;
+
+  z-index:100;
+
+  transition:0.2s ease;
+}
+
+.per-growth-button:hover{
+  transform:scale(1.03);
+}
+
+.per-growth-button:active{
+  transform:scale(0.97);
+}
+
+.per-growth-image{
+  width:240px;
+  height:auto;
+
+  display:block;
+}

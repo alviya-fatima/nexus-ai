@@ -51,7 +51,18 @@ export default function Dashboard() {
         quality={100}
         className="dashboard-image"
       />
+{/* Search Bar */}
 
+<button className="search-button">
+  <Image
+    src="/search-bar.png"
+    alt="Search"
+    width={500}
+    height={70}
+    priority
+    className="search-bar-image"
+  />
+</button>
       {user?.photoURL && (
         <div className="profile-container">
           <Image
@@ -81,3 +92,20 @@ export default function Dashboard() {
     </main>
   );
 }
+{/* Per Growth Button */}
+
+<button
+  className="per-growth-button"
+  onClick={() => {
+    alert("Project list coming next!");
+  }}
+>
+  <Image
+    src="/per-grow.png"
+    alt="Per Growth"
+    width={240}
+    height={70}
+    priority
+    className="per-growth-image"
+  />
+</button>
