@@ -344,3 +344,47 @@ body{
   height: auto;
   display: block;
 }
+.popup-overlay{
+position:fixed;
+inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+justify-content:center;
+align-items:center;
+z-index:9999;
+backdrop-filter:blur(8px);
+}
+
+.popup-container{
+position:relative;
+}
+
+.popup-image{
+width:1100px;
+height:auto;
+display:block;
+}
+
+.popup-close-button{
+position:absolute;
+top:22px;
+right:24px;
+width:55px;
+height:55px;
+border:none;
+border-radius:50%;
+background:transparent;
+color:white;
+font-size:34px;
+cursor:pointer;
+transition:.2s;
+}
+
+.popup-close-button:hover{
+transform:scale(1.1);
+}
+.cancel-button-image{
+    width:55px;
+    height:auto;
+    display:block;
+}

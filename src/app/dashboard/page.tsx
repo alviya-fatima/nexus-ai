@@ -13,10 +13,13 @@ import {
 
 import { useRouter } from "next/navigation";
 
+import CreateProjectPopup from "../components/CreateProjectPopup";
+
 export default function Dashboard() {
   const router = useRouter();
 
   const [user, setUser] = useState<User | null>(null);
+  const [popupOpen, setPopupOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -41,7 +44,6 @@ export default function Dashboard() {
 
   return (
     <main className="dashboard-page">
-      {/* Dashboard Background */}
 
       <Image
         src={dashboard}
@@ -52,52 +54,52 @@ export default function Dashboard() {
         className="dashboard-image"
       />
 
-      {/* Search Bar */}
+      {/* Hide dashboard buttons while popup is open */}
 
-      <button className="search-button">
-        <Image
-          src="/search-bar.png"
-          alt="Search"
-          width={500}
-          height={70}
-          priority
-          className="search-bar-image"
-        />
-      </button>
+      {!popupOpen && (
+        <>
+          <button className="search-button">
+            <Image
+              src="/search-bar.png"
+              alt="Search"
+              width={500}
+              height={70}
+              priority
+              className="search-bar-image"
+            />
+          </button>
 
-      {/* Per Growth Button */}
+          <button className="per-growth-button">
+            <Image
+              src="/per-grow.png"
+              alt="Per Growth"
+              width={250}
+              height={70}
+              priority
+              className="per-growth-image"
+            />
+          </button>
 
-      <button
-        className="per-growth-button"
-        onClick={() => alert("Project list coming soon!")}
-      >
-        <Image
-          src="/per-grow.png"
-          alt="Per Growth"
-          width={250}
-          height={70}
-          priority
-          className="per-growth-image"
-        />
-      </button>
+          <button
+            className="create-project-button"
+            onClick={() => setPopupOpen(true)}
+          >
+            <Image
+              src="/create-btn.png"
+              alt="Create Project"
+              width={260}
+              height={75}
+              priority
+              className="create-project-image"
+            />
+          </button>
+        </>
+      )}
 
-      {/* Create Project Button */}
-
-      <button
-        className="create-project-button"
-        onClick={() => alert("Create Project page coming soon!")}
-      >
-        <Image
-          src="/create-btn.png"
-          alt="Create Project"
-          width={260}
-          height={75}
-          priority
-          className="create-project-image"
-        />
-      </button>
-
-      {/* Profile Picture */}
+      <CreateProjectPopup
+        isOpen={popupOpen}
+        onClose={() => setPopupOpen(false)}
+      />
 
       {user?.photoURL && (
         <div className="profile-container">
@@ -112,8 +114,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Logout Button */}
-
       <button
         onClick={logout}
         className="logout-button"
@@ -127,6 +127,7 @@ export default function Dashboard() {
           className="logout-button-image"
         />
       </button>
+
     </main>
   );
 }
