@@ -11,18 +11,22 @@ export default function Hero() {
   const router = useRouter();
 
   const signInWithGoogle = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
+  try {
+    const provider = new GoogleAuthProvider();
 
-      await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(auth, provider);
 
-      console.log("Login successful!");
+    console.log("Login successful!", result.user);
 
-      router.push("/dashboard");
-    } catch (err) {
-      console.error("Google Login Error:", err);
+    router.push("/dashboard");
+  } catch (err: any) {
+    if (err.code === "auth/cancelled-popup-request") {
+      return;
     }
-  };
+
+    console.error(err);
+  }
+};
 
   return (
     <main className="landing-page">

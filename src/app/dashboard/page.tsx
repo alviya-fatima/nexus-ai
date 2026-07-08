@@ -20,8 +20,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log(currentUser);
-
       if (currentUser) {
         setUser(currentUser);
       } else {
@@ -43,6 +41,8 @@ export default function Dashboard() {
 
   return (
     <main className="dashboard-page">
+      {/* Dashboard Background */}
+
       <Image
         src={dashboard}
         alt="Dashboard"
@@ -51,18 +51,54 @@ export default function Dashboard() {
         quality={100}
         className="dashboard-image"
       />
-{/* Search Bar */}
 
-<button className="search-button">
-  <Image
-    src="/search-bar.png"
-    alt="Search"
-    width={500}
-    height={70}
-    priority
-    className="search-bar-image"
-  />
-</button>
+      {/* Search Bar */}
+
+      <button className="search-button">
+        <Image
+          src="/search-bar.png"
+          alt="Search"
+          width={500}
+          height={70}
+          priority
+          className="search-bar-image"
+        />
+      </button>
+
+      {/* Per Growth Button */}
+
+      <button
+        className="per-growth-button"
+        onClick={() => alert("Project list coming soon!")}
+      >
+        <Image
+          src="/per-grow.png"
+          alt="Per Growth"
+          width={250}
+          height={70}
+          priority
+          className="per-growth-image"
+        />
+      </button>
+
+      {/* Create Project Button */}
+
+      <button
+        className="create-project-button"
+        onClick={() => alert("Create Project page coming soon!")}
+      >
+        <Image
+          src="/create-btn.png"
+          alt="Create Project"
+          width={260}
+          height={75}
+          priority
+          className="create-project-image"
+        />
+      </button>
+
+      {/* Profile Picture */}
+
       {user?.photoURL && (
         <div className="profile-container">
           <Image
@@ -75,6 +111,8 @@ export default function Dashboard() {
           />
         </div>
       )}
+
+      {/* Logout Button */}
 
       <button
         onClick={logout}
@@ -92,20 +130,3 @@ export default function Dashboard() {
     </main>
   );
 }
-{/* Per Growth Button */}
-
-<button
-  className="per-growth-button"
-  onClick={() => {
-    alert("Project list coming next!");
-  }}
->
-  <Image
-    src="/per-grow.png"
-    alt="Per Growth"
-    width={240}
-    height={70}
-    priority
-    className="per-growth-image"
-  />
-</button>

@@ -220,32 +220,127 @@ body{
   height:auto;
 }
 /* PER GROWTH BUTTON */
+.per-growth-button {
+  position: absolute;
 
-.per-growth-button{
-  position:absolute;
+  top: 50%;
+  left: 50%;
 
-  background:none;
-  border:none;
-  padding:0;
+  transform: translate(-50%, -50%);
 
-  cursor:pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
 
-  z-index:100;
+  cursor: pointer;
+  z-index: 100;
+}
 
-  transition:0.2s ease;
+.per-growth-image {
+  width: 240px;
+  height: auto;
+  display: block;
 }
 
 .per-growth-button:hover{
-  transform:scale(1.03);
+  transform: translate(-50%, -50%) scale(1.03);
 }
 
 .per-growth-button:active{
-  transform:scale(0.97);
+  transform: translate(-50%, -50%) scale(0.97);
+}
+
+.per-growth-image{/* =========================
+   PER GROWTH BUTTON
+========================= */
+
+.per-growth-button{
+    position:absolute;
+
+    top:20%;
+
+    left:50%;
+
+    transform:translate(-50%,-50%);
+
+    background:transparent;
+
+    border:none;
+
+    padding:0;
+
+    cursor:pointer;
+
+    z-index:9999;
+
+    transition:0.2s ease;
+}
+
+.per-growth-button:hover{
+    transform:translate(-50%,-50%) scale(1.05);
+}
+
+.per-growth-button:active{
+    transform:translate(-50%,-50%) scale(0.97);
 }
 
 .per-growth-image{
-  width:240px;
-  height:auto;
+    width:240px;
+    height:auto;
+    display:block;
+}
+  width: 240px;
+  height: auto;
+  display: block;
+}
+/* =========================
+   CREATE PROJECT BUTTON
+========================= */
 
-  display:block;
+.create-project-button{
+    position:absolute;
+
+    top:380px;
+    left:250px;
+
+    background:none;
+    border:none;
+    padding:0;
+
+    cursor:pointer;
+
+    z-index:9999;
+
+    transition:0.2s ease;
+}
+
+.create-project-image{
+    width:260px;
+    height:auto;
+    display:block;
+}
+
+.create-project-button:hover{
+    transform:scale(1.05);
+}
+
+.create-project-button:active{
+    transform:scale(0.97);
+}
+.create-project-button {
+  position: absolute;
+  top: 500px;
+  left: 250px;
+
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  z-index: 99999;
+}
+
+.create-project-image {
+  width: 260px;
+  height: auto;
+  display: block;
 }
