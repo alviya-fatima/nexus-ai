@@ -388,3 +388,47 @@ transform:scale(1.1);
     height:auto;
     display:block;
 }
+/* ===========================
+   POPUP BUTTONS
+=========================== */
+
+.popup-btn{
+    position: absolute;
+    left: 230px;      /* Move right */
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    z-index: 20;
+    transition: 0.2s ease;
+}
+
+.popup-btn:hover{
+    transform: scale(1.02);
+}
+
+.popup-btn img{
+    width: 620px;     /* Bigger buttons */
+    height: auto;
+    display: block;
+}
+
+.btn1{
+    top: 175px;
+}
+
+.btn2{
+    top: 260px;
+}
+
+.btn3{
+    top: 345px;
+}
+
+.btn4{
+    top: 430px;
+}
+
+.btn5{
+    top: 515px;
+}

@@ -14,11 +14,16 @@ export default function CreateProjectPopup({
   if (!isOpen) return null;
 
   return (
-    <div className="popup-overlay" onClick={onClose}>
+    <div
+      className="popup-overlay"
+      onClick={onClose}
+    >
       <div
         className="popup-container"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Popup Background */}
+
         <Image
           src="/create-popup.png"
           alt="Create Project Popup"
@@ -27,6 +32,68 @@ export default function CreateProjectPopup({
           priority
           className="popup-image"
         />
+
+        {/* Button 1 */}
+
+        <button className="popup-btn btn1">
+          <Image
+            src="/btn1.png"
+            alt="Button 1"
+            width={260}
+            height={60}
+            priority
+          />
+        </button>
+
+        {/* Button 2 */}
+
+        <button className="popup-btn btn2">
+          <Image
+            src="/btn2.png"
+            alt="Button 2"
+            width={260}
+            height={60}
+            priority
+          />
+        </button>
+
+        {/* Button 3 */}
+
+        <button className="popup-btn btn3">
+          <Image
+            src="/btn3.png"
+            alt="Button 3"
+            width={260}
+            height={60}
+            priority
+          />
+        </button>
+
+        {/* Button 4 */}
+
+        <button className="popup-btn btn4">
+          <Image
+            src="/btn4.png"
+            alt="Button 4"
+            width={260}
+            height={60}
+            priority
+          />
+        </button>
+
+        {/* Button 5 */}
+
+        <button className="popup-btn btn5">
+          <Image
+            src="/btn5.png"
+            alt="Button 5"
+            width={260}
+            height={60}
+            priority
+          />
+        </button>
+
+        {/* Cancel Button */}
 
         <button
           className="popup-close-button"
