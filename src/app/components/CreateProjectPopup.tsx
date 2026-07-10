@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 type CreateProjectPopupProps = {
   isOpen: boolean;
@@ -11,6 +12,8 @@ export default function CreateProjectPopup({
   isOpen,
   onClose,
 }: CreateProjectPopupProps) {
+  const router = useRouter();
+
   if (!isOpen) return null;
 
   return (
@@ -33,12 +36,18 @@ export default function CreateProjectPopup({
           className="popup-image"
         />
 
-        {/* Button 1 */}
+        {/* Button 1 - Career & Skill Learning */}
 
-        <button className="popup-btn btn1">
+        <button
+          className="popup-btn btn1"
+          onClick={() => {
+            onClose();
+            router.push("/dashboard/career");
+          }}
+        >
           <Image
             src="/btn1.png"
-            alt="Button 1"
+            alt="Career & Skill Learning"
             width={260}
             height={60}
             priority
