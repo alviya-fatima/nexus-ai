@@ -439,9 +439,10 @@ transform:scale(1.1);
     overflow:hidden;
 }
 
-.career-background{
-    object-fit:cover;
-    z-index:1;
+.career-background {
+  object-fit: cover;
+  object-position: top center;
+  z-index: -1;
 }
 
 .career-overlay{
