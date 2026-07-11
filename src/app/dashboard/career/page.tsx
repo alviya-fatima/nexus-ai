@@ -3,8 +3,13 @@
 import { useState } from "react";
 import Image from "next/image";
 
+type Message = {
+  role: "assistant" | "user";
+  text: string;
+};
+
 export default function CareerPage() {
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
       text: "What kind of skill are you trying to learn or master today?",
@@ -12,36 +17,68 @@ export default function CareerPage() {
   ]);
 
   const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
+  async function sendMessage() {
+    if (!input.trim() || loading) return;
+
+    const userMessage = input;
 
     setMessages((prev) => [
       ...prev,
       {
         role: "user",
-        text: input,
+        text: userMessage,
       },
     ]);
 
     setInput("");
-  };
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: userMessage,
+        }),
+      });
+
+      const data = await res.json();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: data.reply,
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: "Something went wrong. Please try again.",
+        },
+      ]);
+    }
+
+    setLoading(false);
+  }
 
   return (
     <main className="career-page">
-      {/* Background */}
-
       <Image
         src="/chat-area.png"
         alt="Career Background"
         fill
         priority
-        quality={100}
         className="career-background"
       />
 
       <div className="career-overlay">
-        {/* Messages */}
 
         <div className="messages-area">
           {messages.map((message, index) => (
@@ -58,20 +95,28 @@ export default function CareerPage() {
           ))}
         </div>
 
-        {/* Chat Input */}
-
         <div className="chat-input">
+
           <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
             placeholder="Type what you want to learn..."
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
           />
 
           <button onClick={sendMessage}>
-            Send
+             {loading ? "..." : "Send"}
           </button>
+
         </div>
+
       </div>
     </main>
   );
 }
+    
