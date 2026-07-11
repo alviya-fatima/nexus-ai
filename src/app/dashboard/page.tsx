@@ -1,133 +1,121 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
-import dashboard from "../../assets/dashboard.png";
 
-import { auth } from "../firebase/config";
-import {
-  signOut,
-  onAuthStateChanged,
-  User,
-} from "firebase/auth";
+type Message = {
+  role: "assistant" | "user";
+  text: string;
+};
 
-import { useRouter } from "next/navigation";
+export default function CareerPage() {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: "assistant",
+      text: "What kind of skill are you trying to learn or master today?",
+    },
+  ]);
 
-import CreateProjectPopup from "../components/CreateProjectPopup";
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
-export default function Dashboard() {
-  const router = useRouter();
+  async function sendMessage() {
+    if (!input.trim() || loading) return;
 
-  const [user, setUser] = useState<User | null>(null);
-  const [popupOpen, setPopupOpen] = useState(false);
+    const userMessage = input;
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else {
-        router.push("/");
-      }
-    });
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "user",
+        text: userMessage,
+      },
+    ]);
 
-    return () => unsubscribe();
-  }, [router]);
+    setInput("");
+    setLoading(true);
 
-  const logout = async () => {
     try {
-      await signOut(auth);
-      router.push("/");
-    } catch (error) {
-      console.error(error);
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: userMessage,
+        }),
+      });
+
+      const data = await res.json();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: data.reply,
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: "Something went wrong. Please try again.",
+        },
+      ]);
     }
-  };
+
+    setLoading(false);
+  }
 
   return (
-    <main className="dashboard-page">
-
+    <main className="career-page">
       <Image
-        src={dashboard}
-        alt="Dashboard"
+        src="/chat-area.png"
+        alt="Career Background"
         fill
         priority
-        quality={100}
-        className="dashboard-image"
+        className="career-background"
       />
 
-      {/* Hide dashboard buttons while popup is open */}
+      <div className="career-overlay">
 
-      {!popupOpen && (
-        <>
-          <button className="search-button">
-            <Image
-              src="/search-bar.png"
-              alt="Search"
-              width={500}
-              height={70}
-              priority
-              className="search-bar-image"
-            />
-          </button>
-
-          <button className="per-growth-button">
-            <Image
-              src="/per-grow.png"
-              alt="Per Growth"
-              width={250}
-              height={70}
-              priority
-              className="per-growth-image"
-            />
-          </button>
-
-          <button
-            className="create-project-button"
-            onClick={() => setPopupOpen(true)}
-          >
-            <Image
-              src="/create-btn.png"
-              alt="Create Project"
-              width={260}
-              height={75}
-              priority
-              className="create-project-image"
-            />
-          </button>
-        </>
-      )}
-
-      <CreateProjectPopup
-        isOpen={popupOpen}
-        onClose={() => setPopupOpen(false)}
-      />
-
-      {user?.photoURL && (
-        <div className="profile-container">
-          <Image
-            src={user.photoURL}
-            alt="Profile"
-            width={140}
-            height={140}
-            unoptimized
-            className="profile-picture"
-          />
+        <div className="messages-area">
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              className={
+                message.role === "assistant"
+                  ? "ai-message"
+                  : "user-message"
+              }
+            >
+              {message.text}
+            </div>
+          ))}
         </div>
-      )}
 
-      <button
-        onClick={logout}
-        className="logout-button"
-      >
-        <Image
-          src="/google-logout-btn.png"
-          alt="Logout"
-          width={220}
-          height={60}
-          priority
-          className="logout-button-image"
-        />
-      </button>
+        <div className="chat-input">
 
+          <textarea
+            value={input}
+            placeholder="Type what you want to learn..."
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+          />
+
+          <button onClick={sendMessage}>
+            {loading ? "..." : "Send"}
+          </button>
+
+        </div>
+
+      </div>
     </main>
   );
 }

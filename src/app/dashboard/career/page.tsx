@@ -1,12 +1,36 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 
 export default function CareerPage() {
+  const [messages, setMessages] = useState([
+    {
+      role: "assistant",
+      text: "What kind of skill are you trying to learn or master today?",
+    },
+  ]);
+
+  const [input, setInput] = useState("");
+
+  const sendMessage = () => {
+    if (!input.trim()) return;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "user",
+        text: input,
+      },
+    ]);
+
+    setInput("");
+  };
+
   return (
     <main className="career-page">
-
       {/* Background */}
+
       <Image
         src="/chat-area.png"
         alt="Career Background"
@@ -16,40 +40,38 @@ export default function CareerPage() {
         className="career-background"
       />
 
-      {/* Chat Overlay */}
       <div className="career-overlay">
+        {/* Messages */}
 
-        {/* Messages Area */}
         <div className="messages-area">
-          <div className="ai-message">
-            👋 Welcome to Career & Skill Learning.
-
-            <br /><br />
-
-            Tell me what you'd like to learn today.
-
-            <br />
-
-            I can create a complete personalized roadmap, explain concepts,
-            generate projects, review your code, and help you become job-ready.
-          </div>
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              className={
+                message.role === "assistant"
+                  ? "ai-message"
+                  : "user-message"
+              }
+            >
+              {message.text}
+            </div>
+          ))}
         </div>
 
-        {/* Input */}
-        <div className="chat-input">
+        {/* Chat Input */}
 
+        <div className="chat-input">
           <textarea
-            placeholder="Ask anything... Example: Teach me Java from beginner to advanced."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type what you want to learn..."
           />
 
-          <button>
+          <button onClick={sendMessage}>
             Send
           </button>
-
         </div>
-
       </div>
-
     </main>
   );
 }
