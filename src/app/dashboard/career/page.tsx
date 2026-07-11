@@ -71,12 +71,12 @@ export default function CareerPage() {
   return (
     <main className="career-page">
       <Image
-        src="/chat-area.png"
-        alt="Career Background"
-        fill
-        priority
-        className="career-background"
-      />
+  src="/chat-area-v2.png"
+  alt="Career Background"
+  fill
+  priority
+  className="career-background"
+/>
 
       <div className="career-overlay">
 
