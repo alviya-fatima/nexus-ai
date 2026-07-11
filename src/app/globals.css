@@ -432,3 +432,58 @@ transform:scale(1.1);
 .btn5{
     top: 515px;
 }
+.career-page{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    overflow:hidden;
+}
+
+.career-background{
+    object-fit:cover;
+    z-index:1;
+}
+
+.career-overlay{
+    position:absolute;
+    inset:0;
+    z-index:10;
+    display:flex;
+    flex-direction:column;
+}
+
+.messages-area{
+    flex:1;
+    padding:140px 60px 160px;
+    overflow-y:auto;
+}
+
+.chat-input{
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:0;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    z-index:100;
+}
+
+.chat-input textarea{
+    width:900px;
+    height:60px;
+
+    background:transparent;
+    border:none;
+    outline:none;
+
+    color:white;
+    font-size:18px;
+
+    resize:none;
+}
+
+.chat-input button{
+    margin-left:20px;
+    cursor:pointer;
+}
