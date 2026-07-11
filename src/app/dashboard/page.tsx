@@ -110,7 +110,7 @@ export default function CareerPage() {
           />
 
           <button onClick={sendMessage}>
-            {loading ? "..." : "Send"}
+             {loading ? "..." : "Send"}
           </button>
 
         </div>
@@ -119,3 +119,4 @@ export default function CareerPage() {
     </main>
   );
 }
+    
