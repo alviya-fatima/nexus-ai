@@ -1,37 +1,44 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY!,
 });
 
 export async function POST(req: Request) {
   try {
     const { message } = await req.json();
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are NEXUS AI, an expert AI mentor. Help users learn skills step by step. Always explain clearly and encourage practical learning.",
-        },
-        {
-          role: "user",
-          content: message,
-        },
-      ],
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `
+You are NEXUS AI.
+
+You are an expert AI mentor.
+
+Help users learn skills step by step.
+
+Always explain clearly.
+
+Always motivate them.
+
+User:
+${message}
+`,
     });
 
     return Response.json({
-      reply: completion.choices[0].message.content,
+      reply: response.text,
     });
   } catch (error) {
     console.error(error);
 
     return Response.json(
-      { error: "Something went wrong." },
-      { status: 500 }
+      {
+        reply: "Something went wrong.",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }

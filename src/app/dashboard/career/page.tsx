@@ -81,20 +81,37 @@ export default function CareerPage() {
       <div className="career-overlay">
 
         <div className="messages-area">
-          {messages.map((message, index) => (
-            <div
-              key={index}
-              className={
-                message.role === "assistant"
-                  ? "ai-message"
-                  : "user-message"
-              }
-            >
-              {message.text}
-            </div>
-          ))}
+  {messages.map((message, index) => (
+    <div
+      key={index}
+      className={`message-row ${
+        message.role === "user" ? "user-row" : "assistant-row"
+      }`}
+    >
+      {message.role === "assistant" && (
+        <div className="avatar ai-avatar">
+          N
         </div>
+      )}
 
+      <div
+        className={`message-bubble ${
+          message.role === "assistant"
+            ? "assistant-bubble"
+            : "user-bubble"
+        }`}
+      >
+        {message.text}
+      </div>
+
+      {message.role === "user" && (
+        <div className="avatar user-avatar">
+          A
+        </div>
+      )}
+    </div>
+  ))}
+</div>
         <div className="chat-input">
 
           <textarea
