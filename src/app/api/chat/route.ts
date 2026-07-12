@@ -5,40 +5,44 @@ const ai = new GoogleGenAI({
 });
 
 export async function POST(req: Request) {
-  try {
-    const { message } = await req.json();
+  const { message } = await req.json();
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const response = await ai.models.generateContentStream({
+          model: "gemini-2.5-flash",
+          contents: `
 You are NEXUS AI.
 
 You are an expert AI mentor.
 
-Help users learn skills step by step.
+Always teach step by step.
 
-Always explain clearly.
-
-Always motivate them.
+Be encouraging.
 
 User:
 ${message}
 `,
-    });
+        });
 
-    return Response.json({
-      reply: response.text,
-    });
-  } catch (error) {
-    console.error(error);
+        for await (const chunk of response) {
+          controller.enqueue(
+            new TextEncoder().encode(chunk.text ?? "")
+          );
+        }
 
-    return Response.json(
-      {
-        reply: "Something went wrong.",
-      },
-      {
-        status: 500,
+        controller.close();
+      } catch (err) {
+        console.error(err);
+        controller.error(err);
       }
-    );
-  }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+    },
+  });
 }

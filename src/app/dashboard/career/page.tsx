@@ -24,11 +24,16 @@ export default function CareerPage() {
 
     const userMessage = input;
 
+    // Add user message + empty AI message
     setMessages((prev) => [
       ...prev,
       {
         role: "user",
         text: userMessage,
+      },
+      {
+        role: "assistant",
+        text: "",
       },
     ]);
 
@@ -46,23 +51,46 @@ export default function CareerPage() {
         }),
       });
 
-      const data = await res.json();
+      if (!res.body) {
+        throw new Error("No response body.");
+      }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: data.reply,
-        },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      let aiReply = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        aiReply += decoder.decode(value);
+
+        setMessages((prev) => {
+          const updated = [...prev];
+
+          updated[updated.length - 1] = {
+            role: "assistant",
+            text: aiReply,
+          };
+
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error(error);
+
+      setMessages((prev) => {
+        const updated = [...prev];
+
+        updated[updated.length - 1] = {
           role: "assistant",
           text: "Something went wrong. Please try again.",
-        },
-      ]);
+        };
+
+        return updated;
+      });
     }
 
     setLoading(false);
@@ -71,49 +99,50 @@ export default function CareerPage() {
   return (
     <main className="career-page">
       <Image
-  src="/chat-area-v2.png"
-  alt="Career Background"
-  fill
-  priority
-  className="career-background"
-/>
+        src="/chat-area-v2.png"
+        alt="Career Background"
+        fill
+        priority
+        className="career-background"
+      />
 
       <div className="career-overlay">
-
         <div className="messages-area">
-  {messages.map((message, index) => (
-    <div
-      key={index}
-      className={`message-row ${
-        message.role === "user" ? "user-row" : "assistant-row"
-      }`}
-    >
-      {message.role === "assistant" && (
-        <div className="avatar ai-avatar">
-          N
-        </div>
-      )}
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              className={`message-row ${
+                message.role === "user"
+                  ? "user-row"
+                  : "assistant-row"
+              }`}
+            >
+              {message.role === "assistant" && (
+                <div className="avatar ai-avatar">
+                  N
+                </div>
+              )}
 
-      <div
-        className={`message-bubble ${
-          message.role === "assistant"
-            ? "assistant-bubble"
-            : "user-bubble"
-        }`}
-      >
-        {message.text}
-      </div>
+              <div
+                className={`message-bubble ${
+                  message.role === "assistant"
+                    ? "assistant-bubble"
+                    : "user-bubble"
+                }`}
+              >
+                {message.text}
+              </div>
 
-      {message.role === "user" && (
-        <div className="avatar user-avatar">
-          A
+              {message.role === "user" && (
+                <div className="avatar user-avatar">
+                  A
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-      )}
-    </div>
-  ))}
-</div>
+
         <div className="chat-input">
-
           <textarea
             value={input}
             placeholder="Type what you want to learn..."
@@ -126,14 +155,11 @@ export default function CareerPage() {
             }}
           />
 
-          <button onClick={sendMessage}>
-             {loading ? "..." : "Send"}
+          <button onClick={sendMessage} disabled={loading}>
+            {loading ? "Thinking..." : "Send"}
           </button>
-
         </div>
-
       </div>
     </main>
   );
 }
-    
