@@ -19,12 +19,18 @@ export default function CareerPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [roadmap, setRoadmap] = useState<{
+    goal: string;
+    steps: string[];
+  } | null>(null);
+
   async function sendMessage() {
     if (!input.trim() || loading) return;
 
     const userMessage = input;
 
-    // Add user message + empty AI message
+   
+    // Add user message
     setMessages((prev) => [
       ...prev,
       {
@@ -51,33 +57,58 @@ export default function CareerPage() {
         }),
       });
 
-      if (!res.body) {
-        throw new Error("No response body.");
-      }
+     const data = await res.json();
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
+setRoadmap({
+  goal: data.goal,
+  steps: data.roadmap,
+});
 
-      let aiReply = "";
+const lessonText = `
+📚 ${data.lesson.title}
 
-      while (true) {
-        const { done, value } = await reader.read();
+━━━━━━━━━━━━━━━━━━━━━━
 
-        if (done) break;
+📖 What You'll Learn
 
-        aiReply += decoder.decode(value);
+${data.lesson.whatYouLearn}
 
-        setMessages((prev) => {
-          const updated = [...prev];
+━━━━━━━━━━━━━━━━━━━━━━
 
-          updated[updated.length - 1] = {
-            role: "assistant",
-            text: aiReply,
-          };
+💡 Why It's Important
 
-          return updated;
-        });
-      }
+${data.lesson.whyImportant}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📝 What To Do
+
+${data.lesson.whatToDo
+  .map((item: string) => `• ${item}`)
+  .join("\n")}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 Mini Task
+
+${data.lesson.miniTask}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+When you've finished this lesson,
+press the Done button.
+`;
+
+setMessages((prev) => {
+  const updated = [...prev];
+
+  updated[updated.length - 1] = {
+    role: "assistant",
+    text: lessonText,
+  };
+
+  return updated;
+});
     } catch (error) {
       console.error(error);
 
@@ -107,6 +138,37 @@ export default function CareerPage() {
       />
 
       <div className="career-overlay">
+
+        {roadmap && (
+          <div className="roadmap-card">
+
+            <h2>🎯 {roadmap.goal}</h2>
+
+            <h3>🗺️ Learning Roadmap</h3>
+
+            <div className="roadmap-list">
+              {roadmap.steps.map((step, index) => (
+                <div key={index} className="roadmap-step">
+                  {index === 0 ? "✅" : "⬜"} {step}
+                </div>
+              ))}
+            </div>
+<button
+  className="start-learning-btn"
+  onClick={() => {
+    document
+      .querySelector(".messages-area")
+      ?.scrollIntoView({
+        behavior: "smooth",
+      });
+  }}
+>
+  🚀 Start Step 1
+</button>
+
+          </div>
+        )}
+
         <div className="messages-area">
           {messages.map((message, index) => (
             <div
@@ -143,6 +205,7 @@ export default function CareerPage() {
         </div>
 
         <div className="chat-input">
+
           <textarea
             value={input}
             placeholder="Type what you want to learn..."
@@ -158,7 +221,9 @@ export default function CareerPage() {
           <button onClick={sendMessage} disabled={loading}>
             {loading ? "Thinking..." : "Send"}
           </button>
+
         </div>
+
       </div>
     </main>
   );

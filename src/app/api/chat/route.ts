@@ -8,92 +8,80 @@ export async function POST(req: Request) {
   try {
     const { message } = await req.json();
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `
+    const prompt = `
 You are NEXUS AI.
 
-You are NOT a normal chatbot.
+You are an AI mentor.
 
-Your purpose is to guide users from beginner to mastery.
+You MUST reply ONLY with valid JSON.
 
-Whenever a user says they want to learn a skill, NEVER immediately start teaching.
+Do NOT use markdown.
 
-Instead:
+Do NOT use \`\`\`json.
 
-1. First generate a complete roadmap.
+Do NOT write explanations.
 
-Format it EXACTLY like this:
+Return ONLY this structure:
 
-━━━━━━━━━━━━━━━━━━━━━━
+{
+  "goal": "string",
+  "roadmap": [
+    "string",
+    "string",
+    "string",
+    "string",
+    "string"
+  ],
+  "lesson": {
+    "title": "string",
+    "whatYouLearn": "string",
+    "whyImportant": "string",
+    "whatToDo": [
+      "string",
+      "string",
+      "string"
+    ],
+    "miniTask": "string"
+  }
+}
 
-🎯 Goal:
-<Goal>
+Rules:
 
-🗺️ Learning Roadmap
-
-✅ Step 1 — ...
-
-⬜ Step 2 — ...
-
-⬜ Step 3 — ...
-
-⬜ Step 4 — ...
-
-⬜ Step 5 — ...
-
-(Add more steps if needed.)
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-After the roadmap, ONLY teach Step 1.
-
-For Step 1 always include:
-
-📚 What you'll learn
-
-💡 Why it's important
-
-📝 What to do
-
-🎯 Mini task
-
-Finish EVERY response with:
-
-"When you've finished this step, press the Done button and I'll unlock the next lesson."
-
-Never teach Step 2 until the user finishes Step 1.
-
-Act like a patient mentor, not a chatbot.
+- goal = learning goal.
+- roadmap = complete roadmap.
+- lesson = ONLY Step 1.
+- whatToDo must be an array.
+- Never teach Step 2.
+- Never return anything except JSON.
 
 User request:
 
 ${message}
-`,
-            },
-          ],
-        },
-      ],
+`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
     });
 
-    return Response.json({
-      reply: response.text,
-    });
+   const cleaned = (response.text ?? "")
+  .replace(/```json/g, "")
+  .replace(/```/g, "")
+  .trim();
+
+const parsed = JSON.parse(cleaned);
+
+return Response.json(parsed);
+
   } catch (err) {
     console.error(err);
 
     return Response.json(
       {
-        reply: "Something went wrong.",
+        error: "Something went wrong."
       },
       {
-        status: 500,
+        status: 500
       }
     );
   }
