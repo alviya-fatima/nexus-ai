@@ -3,228 +3,267 @@
 import { useState } from "react";
 import Image from "next/image";
 
-type Message = {
-  role: "assistant" | "user";
-  text: string;
+type Lesson = {
+  title: string;
+  whatYouLearn: string;
+  whyImportant: string;
+  whatToDo: string[];
+  miniTask: string;
+};
+
+type Roadmap = {
+  goal: string;
+  roadmap: string[];
 };
 
 export default function CareerPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      text: "What kind of skill are you trying to learn or master today?",
-    },
-  ]);
+  const [skill, setSkill] = useState("");
 
-  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [roadmap, setRoadmap] = useState<{
-    goal: string;
-    steps: string[];
-  } | null>(null);
+  const [roadmap, setRoadmap] =
+    useState<Roadmap | null>(null);
 
-  async function sendMessage() {
-    if (!input.trim() || loading) return;
+  const [lesson, setLesson] =
+    useState<Lesson | null>(null);
 
-    const userMessage = input;
+  const [question, setQuestion] =
+    useState("");
 
-   
-    // Add user message
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "user",
-        text: userMessage,
-      },
-      {
-        role: "assistant",
-        text: "",
-      },
-    ]);
+  const [answer, setAnswer] =
+    useState("");
 
-    setInput("");
+  async function generateRoadmap() {
+    if (!skill.trim()) return;
+
     setLoading(true);
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: userMessage,
-        }),
-      });
+    const res = await fetch("/api/chat", {
+      method: "POST",
 
-     const data = await res.json();
+      headers: {
+        "Content-Type": "application/json",
+      },
 
-setRoadmap({
-  goal: data.goal,
-  steps: data.roadmap,
-});
+      body: JSON.stringify({
+        message: skill,
+      }),
+    });
 
-const lessonText = `
-📚 ${data.lesson.title}
+    const data = await res.json();
 
-━━━━━━━━━━━━━━━━━━━━━━
+    setRoadmap({
+      goal: data.goal,
+      roadmap: data.roadmap,
+    });
 
-📖 What You'll Learn
-
-${data.lesson.whatYouLearn}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-💡 Why It's Important
-
-${data.lesson.whyImportant}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-📝 What To Do
-
-${data.lesson.whatToDo
-  .map((item: string) => `• ${item}`)
-  .join("\n")}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 Mini Task
-
-${data.lesson.miniTask}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-When you've finished this lesson,
-press the Done button.
-`;
-
-setMessages((prev) => {
-  const updated = [...prev];
-
-  updated[updated.length - 1] = {
-    role: "assistant",
-    text: lessonText,
-  };
-
-  return updated;
-});
-    } catch (error) {
-      console.error(error);
-
-      setMessages((prev) => {
-        const updated = [...prev];
-
-        updated[updated.length - 1] = {
-          role: "assistant",
-          text: "Something went wrong. Please try again.",
-        };
-
-        return updated;
-      });
-    }
+    setLesson(data.lesson);
 
     setLoading(false);
   }
 
-  return (
-    <main className="career-page">
-      <Image
-        src="/chat-area-v2.png"
-        alt="Career Background"
-        fill
-        priority
-        className="career-background"
-      />
+  async function askLessonQuestion() {
+    if (!question.trim()) return;
 
-      <div className="career-overlay">
+    const res = await fetch("/api/chat", {
+      method: "POST",
 
-        {roadmap && (
-          <div className="roadmap-card">
+      headers: {
+        "Content-Type": "application/json",
+      },
 
-            <h2>🎯 {roadmap.goal}</h2>
+      body: JSON.stringify({
+        message: `
+Current Lesson:
 
-            <h3>🗺️ Learning Roadmap</h3>
+${lesson?.title}
 
-            <div className="roadmap-list">
-              {roadmap.steps.map((step, index) => (
-                <div key={index} className="roadmap-step">
-                  {index === 0 ? "✅" : "⬜"} {step}
+Student Question:
+
+${question}
+
+Answer ONLY this question.
+Do NOT generate another roadmap.
+`,
+      }),
+    });
+
+    const data = await res.json();
+
+    setAnswer(data.reply);
+  }
+
+  return (<main className="career-page">
+
+  <Image
+    src="/chat-area-v2.png"
+    alt="Career Background"
+    fill
+    priority
+    className="career-background"
+  />
+
+  <div className="career-overlay">
+
+    {!roadmap && (
+
+      <div className="skill-screen">
+
+        <h1>What do you want to learn?</h1>
+
+        <textarea
+          value={skill}
+          placeholder="Example: Java, Cybersecurity..."
+          onChange={(e) => setSkill(e.target.value)}
+        />
+
+        <button
+          onClick={generateRoadmap}
+          disabled={loading}
+        >
+          {loading
+            ? "Generating..."
+            : "Generate Roadmap"}
+        </button>
+
+      </div>
+
+    )}
+
+    {roadmap && (
+
+      <>
+
+        <div className="chat-card">
+
+          <h1>
+            🎯 {roadmap.goal}
+          </h1>
+
+          <h2>
+            🗺️ Learning Roadmap
+          </h2>
+
+          <div className="roadmap-list">
+
+            {roadmap.roadmap.map(
+              (step, index) => (
+
+                <div
+                  key={index}
+                  className="roadmap-step"
+                >
+                  {index === 0
+                    ? "✅"
+                    : "⬜"}{" "}
+                  {step}
                 </div>
-              ))}
-            </div>
-<button
-  className="start-learning-btn"
-  onClick={() => {
-    document
-      .querySelector(".messages-area")
-      ?.scrollIntoView({
-        behavior: "smooth",
-      });
-  }}
->
-  🚀 Start Step 1
-</button>
+
+              )
+            )}
 
           </div>
-        )}
 
-        <div className="messages-area">
-          {messages.map((message, index) => (
-            <div
-              key={index}
-              className={`message-row ${
-                message.role === "user"
-                  ? "user-row"
-                  : "assistant-row"
-              }`}
-            >
-              {message.role === "assistant" && (
-                <div className="avatar ai-avatar">
-                  N
-                </div>
+          <hr />
+
+          <h2>
+            📚 {lesson?.title}
+          </h2>
+                    <section>
+
+            <h3>📖 What You'll Learn</h3>
+
+            <p>
+              {lesson?.whatYouLearn}
+            </p>
+
+          </section>
+
+          <section>
+
+            <h3>💡 Why It's Important</h3>
+
+            <p>
+              {lesson?.whyImportant}
+            </p>
+
+          </section>
+
+          <section>
+
+            <h3>📝 What To Do</h3>
+
+            <ul>
+
+              {lesson?.whatToDo.map(
+                (task, index) => (
+
+                  <li key={index}>
+                    {task}
+                  </li>
+
+                )
               )}
 
-              <div
-                className={`message-bubble ${
-                  message.role === "assistant"
-                    ? "assistant-bubble"
-                    : "user-bubble"
-                }`}
-              >
-                {message.text}
-              </div>
+            </ul>
 
-              {message.role === "user" && (
-                <div className="avatar user-avatar">
-                  A
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+          </section>
 
-        <div className="chat-input">
+          <section>
+
+            <h3>🎯 Mini Task</h3>
+
+            <p>
+              {lesson?.miniTask}
+            </p>
+
+          </section>
+
+          <hr />
+
+          <h3>
+            Ask anything about this lesson
+          </h3>
 
           <textarea
-            value={input}
-            placeholder="Type what you want to learn..."
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
+            value={question}
+            placeholder="Ask about Step 1..."
+            onChange={(e) =>
+              setQuestion(e.target.value)
+            }
           />
 
-          <button onClick={sendMessage} disabled={loading}>
-            {loading ? "Thinking..." : "Send"}
+          <button
+            onClick={askLessonQuestion}
+          >
+            Ask NEXUS AI
+          </button>
+
+          {answer && (
+
+            <div className="assistant-answer">
+
+              <h3>Answer</h3>
+
+              <p>{answer}</p>
+
+            </div>
+
+          )}
+
+          <button
+            className="done-button"
+          >
+            ✅ Done
           </button>
 
         </div>
 
-      </div>
-    </main>
+      </>
+
+    )}
+
+  </div>
+  </main>
   );
 }
