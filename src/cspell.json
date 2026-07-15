@@ -1,0 +1,35 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "nexus",
+    "genai",
+    "Gemini",
+    "dataurl",
+    "dataUrl",
+    "mimeType",
+    "inlineData",
+    "noopener",
+    "noreferrer",
+    "attachmentsmap",
+    "roadmap",
+    "roadmaps",
+    "lessonloading",
+    "stepindex",
+    "askquestion",
+    "markdone",
+    "cleanjson",
+    "parsedataurl",
+    "chatcard",
+    "steps",
+    "tailwindcss",
+    "nextjs",
+    "esbuild",
+    "gpt"
+  ],
+  "ignorePaths": [
+    "node_modules",
+    ".next",
+    "package-lock.json"
+  ]
+}

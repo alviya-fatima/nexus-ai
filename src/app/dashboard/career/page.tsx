@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
 type Lesson = {
@@ -8,34 +8,58 @@ type Lesson = {
   whatYouLearn: string;
   whyImportant: string;
   whatToDo: string[];
-  miniTask: string;
 };
+
+type Attachment =
+  | { id: string; kind: "image"; dataUrl: string; name: string }
+  | { id: string; kind: "link"; url: string };
 
 type ChatEntry = {
   question: string;
   answer: string;
+  attachments?: Attachment[];
 };
+
+type StepRecord = {
+  index: number;
+  lesson: Lesson;
+  chat: ChatEntry[];
+};
+
+function makeId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export default function CareerPage() {
   // Skill input
   const [skill, setSkill] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Roadmap + lessons
+  // Roadmap + step history
   const [goal, setGoal] = useState("");
   const [roadmap, setRoadmap] = useState<string[]>([]);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [steps, setSteps] = useState<StepRecord[]>([]);
   const [lessonLoading, setLessonLoading] = useState(false);
   const [finished, setFinished] = useState(false);
 
-  // Per-step Q&A chat
-  const [chatByStep, setChatByStep] = useState<Record<number, ChatEntry[]>>({});
+  // Question composer (always applies to the latest/active step)
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [linkInputOpen, setLinkInputOpen] = useState(false);
+  const [linkDraft, setLinkDraft] = useState("");
+
+  const feedRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const started = roadmap.length > 0;
-  const currentChat = chatByStep[currentStep] ?? [];
+  const activeStepIndex = steps.length - 1;
+
+  useEffect(() => {
+    if (feedRef.current) {
+      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    }
+  }, [steps.length]);
 
   async function generateRoadmap() {
     if (!skill.trim() || loading) return;
@@ -52,9 +76,7 @@ export default function CareerPage() {
 
       setGoal(data.goal);
       setRoadmap(data.roadmap);
-      setLesson(data.lesson);
-      setCurrentStep(0);
-      setChatByStep({});
+      setSteps([{ index: 0, lesson: data.lesson, chat: [] }]);
       setFinished(false);
     } catch (error) {
       console.error(error);
@@ -63,10 +85,60 @@ export default function CareerPage() {
     setLoading(false);
   }
 
+  function handleFilesSelected(fileList: FileList | null) {
+    if (!fileList) return;
+
+    Array.from(fileList).forEach((file) => {
+      if (!file.type.startsWith("image/")) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        setAttachments((prev) => [
+          ...prev,
+          { id: makeId(), kind: "image", dataUrl, name: file.name },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function addLinkAttachment() {
+    const trimmed = linkDraft.trim();
+    if (!trimmed) return;
+
+    setAttachments((prev) => [
+      ...prev,
+      { id: makeId(), kind: "link", url: trimmed },
+    ]);
+    setLinkDraft("");
+    setLinkInputOpen(false);
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }
+
   async function askQuestion() {
-    if (!question.trim() || asking || !lesson) return;
+    if ((!question.trim() && attachments.length === 0) || asking || activeStepIndex < 0)
+      return;
+
+    const activeLesson = steps[activeStepIndex].lesson;
     const askedQuestion = question;
+    const askedAttachments = attachments;
+
+    const imagePayload = askedAttachments
+      .filter((a): a is Extract<Attachment, { kind: "image" }> => a.kind === "image")
+      .map((a) => a.dataUrl);
+
+    const linkPayload = askedAttachments
+      .filter((a): a is Extract<Attachment, { kind: "link" }> => a.kind === "link")
+      .map((a) => a.url);
+
     setQuestion("");
+    setAttachments([]);
     setAsking(true);
 
     try {
@@ -75,20 +147,32 @@ export default function CareerPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "question",
-          lessonTitle: lesson.title,
-          question: askedQuestion,
+          lessonTitle: activeLesson.title,
+          question: askedQuestion || "(see attached image/link)",
+          images: imagePayload,
+          links: linkPayload,
         }),
       });
 
       const data = await res.json();
 
-      setChatByStep((prev) => ({
-        ...prev,
-        [currentStep]: [
-          ...(prev[currentStep] ?? []),
-          { question: askedQuestion, answer: data.reply ?? "" },
-        ],
-      }));
+      setSteps((prev) =>
+        prev.map((step, i) =>
+          i === activeStepIndex
+            ? {
+                ...step,
+                chat: [
+                  ...step.chat,
+                  {
+                    question: askedQuestion,
+                    answer: data.reply ?? "",
+                    attachments: askedAttachments,
+                  },
+                ],
+              }
+            : step
+        )
+      );
     } catch (error) {
       console.error(error);
     }
@@ -97,11 +181,11 @@ export default function CareerPage() {
   }
 
   async function markDone() {
-    if (lessonLoading) return;
+    if (lessonLoading || activeStepIndex < 0) return;
 
-    const nextStep = currentStep + 1;
+    const nextIndex = activeStepIndex + 1;
 
-    if (nextStep >= roadmap.length) {
+    if (nextIndex >= roadmap.length) {
       setFinished(true);
       return;
     }
@@ -116,14 +200,16 @@ export default function CareerPage() {
           mode: "lesson",
           goal,
           roadmap,
-          stepIndex: nextStep,
+          stepIndex: nextIndex,
         }),
       });
 
       const data = await res.json();
 
-      setLesson(data.lesson);
-      setCurrentStep(nextStep);
+      setSteps((prev) => [
+        ...prev,
+        { index: nextIndex, lesson: data.lesson, chat: [] },
+      ]);
     } catch (error) {
       console.error(error);
     }
@@ -174,112 +260,240 @@ export default function CareerPage() {
 
           {started && (
             <div className="chat-card">
-              <h1>🎯 {goal}</h1>
+              {/* Pinned header: goal + compact roadmap */}
+              <div className="chat-card-header">
+                <h1>🎯 {goal}</h1>
 
-              <h2>🗺️ Learning Roadmap</h2>
+                <h2>🗺️ Your Roadmap to Conquer</h2>
+                <p className="roadmap-intro">
+                  Here's everything you'll work through, step by step, to get there 👇
+                </p>
 
-              <div className="roadmap-list">
-                {roadmap.map((step, index) => (
-                  <div
-                    key={index}
-                    className={`roadmap-step ${
-                      index === currentStep ? "roadmap-step-active" : ""
-                    }`}
-                  >
-                    {index < currentStep
-                      ? "✅"
-                      : index === currentStep
-                      ? "▶️"
-                      : "⬜"}{" "}
-                    {step}
-                  </div>
-                ))}
+                <div className="roadmap-list">
+                  {roadmap.map((step, index) => (
+                    <div
+                      key={index}
+                      className={`roadmap-step ${
+                        index === activeStepIndex ? "roadmap-step-active" : ""
+                      }`}
+                    >
+                      {index < activeStepIndex
+                        ? "✅"
+                        : index === activeStepIndex
+                        ? "▶️"
+                        : "⬜"}{" "}
+                      {step}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <hr />
 
-              {lessonLoading || !lesson ? (
-                <p className="loading-text">Loading next lesson...</p>
-              ) : (
-                <>
-                  <h2>
-                    📚 Step {currentStep + 1}: {lesson.title}
-                  </h2>
+              {/* Scrollable feed: every step ever generated stays here */}
+              <div className="steps-feed" ref={feedRef}>
+                {steps.map((step, i) => {
+                  const isActive = i === activeStepIndex;
 
-                  <section>
-                    <h3>📖 What You'll Learn</h3>
-                    <p>{lesson.whatYouLearn}</p>
-                  </section>
+                  return (
+                    <div key={step.index} className="step-block">
+                      <h2>
+                        📚 Step {step.index + 1}: {step.lesson.title}
+                      </h2>
 
-                  <section>
-                    <h3>💡 Why It's Important</h3>
-                    <p>{lesson.whyImportant}</p>
-                  </section>
+                      <div className="lesson-bubble bubble-learn">
+                        <h3>📖 What You'll Learn</h3>
+                        <p>{step.lesson.whatYouLearn}</p>
+                      </div>
 
-                  <section>
-                    <h3>📝 What To Do</h3>
-                    <ul>
-                      {lesson.whatToDo.map((task, index) => (
-                        <li key={index}>{task}</li>
-                      ))}
-                    </ul>
-                  </section>
+                      <div className="lesson-bubble bubble-why">
+                        <h3>💡 Why It's Important</h3>
+                        <p>{step.lesson.whyImportant}</p>
+                      </div>
 
-                  <section>
-                    <h3>🎯 Mini Task</h3>
-                    <p>{lesson.miniTask}</p>
-                  </section>
+                      <div className="lesson-bubble bubble-todo">
+                        <h3>📝 What To Do</h3>
+                        <ul>
+                          {step.lesson.whatToDo.map((task, index) => (
+                            <li key={index}>{task}</li>
+                          ))}
+                        </ul>
+                      </div>
 
-                  <hr />
-
-                  <h3>💬 Ask anything about this step</h3>
-
-                  {currentChat.length > 0 && (
-                    <div className="step-chat-history">
-                      {currentChat.map((entry, index) => (
-                        <div key={index} className="step-chat-entry">
-                          <p className="step-chat-question">
-                            🙋 {entry.question}
-                          </p>
-                          <p className="step-chat-answer">
-                            🤖 {entry.answer}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <textarea
-                    value={question}
-                    placeholder={`Ask about Step ${currentStep + 1}...`}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        askQuestion();
-                      }
-                    }}
-                  />
-
-                  <button
-                    className="secondary-button"
-                    onClick={askQuestion}
-                    disabled={asking}
-                  >
-                    {asking ? "Thinking..." : "Ask NEXUS AI"}
-                  </button>
-
-                  {finished ? (
-                    <p className="finished-text">
-                      🎉 You've completed every step in this roadmap!
-                    </p>
+                      {step.chat.length > 0 && (
+                        <div className="gpt-thread">
+                          {step.chat.map((entry, index) => (
+                            <div key={index} className="gpt-exchange">
+                          {step.chat.length > 0 && (
+  <div className="gpt-thread">
+    {step.chat.map((entry, index) => (
+      <div key={index} className="gpt-exchange">
+        <div className="gpt-msg gpt-msg-user">
+          {entry.attachments &&
+            entry.attachments.length > 0 && (
+              <div className="gpt-attachments">
+                {entry.attachments.map((att) =>
+                  att.kind === "image" ? (
+                    <img
+                      key={att.id}
+                      src={att.dataUrl}
+                      alt={att.name}
+                      className="gpt-attachment-image"
+                    />
                   ) : (
-                    <button className="done-button" onClick={markDone}>
-                      ✅ Done — Next Step
-                    </button>
-                  )}
-                </>
-              )}
+                    <a
+                      key={att.id}
+                      href={att.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="gpt-attachment-link"
+                    >
+                      🔗 {att.url}
+                    </a>
+                  )
+                )}
+              </div>
+            )}
+
+          {entry.question && <p>{entry.question}</p>}
+        </div>
+
+        <div className="gpt-msg gpt-msg-assistant">
+          <span className="gpt-avatar">🤖</span>
+          <p>{entry.answer}</p>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {isActive && (
+                        <>
+                          <h3 className="ask-heading">
+                            💬 Ask anything about this step
+                          </h3>
+
+                          {attachments.length > 0 && (
+                            <div className="composer-attachments">
+                              {attachments.map((att) => (
+                                <div key={att.id} className="composer-chip">
+                                  {att.kind === "image" ? (
+                                    <img
+                                      src={att.dataUrl}
+                                      alt={att.name}
+                                      className="composer-chip-image"
+                                    />
+                                  ) : (
+                                    <span className="composer-chip-link">
+                                      🔗 {att.url}
+                                    </span>
+                                  )}
+                                  <button
+                                    className="composer-chip-remove"
+                                    onClick={() => removeAttachment(att.id)}
+                                    aria-label="Remove attachment"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {linkInputOpen && (
+                            <div className="link-input-row">
+                              <input
+                                type="text"
+                                value={linkDraft}
+                                placeholder="Paste a link..."
+                                onChange={(e) => setLinkDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    addLinkAttachment();
+                                  }
+                                }}
+                              />
+                              <button onClick={addLinkAttachment}>Add</button>
+                            </div>
+                          )}
+
+                          <textarea
+                            value={question}
+                            placeholder={`Ask about Step ${step.index + 1}...`}
+                            onChange={(e) => setQuestion(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                askQuestion();
+                              }
+                            }}
+                          />
+
+                          <div className="composer-toolbar">
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              hidden
+                              onChange={(e) =>
+                                handleFilesSelected(e.target.files)
+                              }
+                            />
+                            <button
+                              type="button"
+                              className="icon-button"
+                              onClick={() => fileInputRef.current?.click()}
+                              title="Upload image"
+                            >
+                              📷 Image
+                            </button>
+                            <button
+                              type="button"
+                              className="icon-button"
+                              onClick={() => setLinkInputOpen((v) => !v)}
+                              title="Add link"
+                            >
+                              🔗 Link
+                            </button>
+
+                            <button
+                              className="secondary-button"
+                              onClick={askQuestion}
+                              disabled={asking}
+                            >
+                              {asking ? "Thinking..." : "Ask NEXUS AI"}
+                            </button>
+                          </div>
+
+                          {finished ? (
+                            <p className="finished-text">
+                              🎉 You've completed every step in this roadmap!
+                            </p>
+                          ) : (
+                            <button
+                              className="done-button"
+                              onClick={markDone}
+                              disabled={lessonLoading}
+                            >
+                              {lessonLoading
+                                ? "Loading next step..."
+                                : "✅ Done — Next Step"}
+                            </button>
+                          )}
+                        </>
+                      )}
+
+                      {i < steps.length - 1 && <hr className="step-divider" />}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

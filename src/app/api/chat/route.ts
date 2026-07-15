@@ -11,6 +11,14 @@ function cleanJson(text: string) {
     .trim();
 }
 
+function parseDataUrl(dataUrl: string): { mimeType: string; data: string } {
+  const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
+  if (!match) {
+    return { mimeType: "image/png", data: dataUrl };
+  }
+  return { mimeType: match[1], data: match[2] };
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -23,7 +31,7 @@ export async function POST(req: Request) {
       const { message } = body;
 
       const prompt = `
-You are NEXUS AI, an AI mentor that builds step-by-step learning roadmaps.
+You are NEXUS AI, a friendly, encouraging AI mentor that builds complete, end-to-end step-by-step learning roadmaps.
 
 You MUST reply ONLY with valid JSON. No markdown. No \`\`\`json. No explanations.
 
@@ -31,21 +39,24 @@ Return ONLY this structure:
 
 {
   "goal": "string",
-  "roadmap": ["string", "string", "string", "string", "string"],
+  "roadmap": ["string", "string", "string", "..."],
   "lesson": {
     "title": "string",
     "whatYouLearn": "string",
     "whyImportant": "string",
-    "whatToDo": ["string", "string", "string"],
-    "miniTask": "string"
+    "whatToDo": ["string", "string", "string"]
   }
 }
 
 Rules:
-- goal = the learning goal, phrased clearly.
-- roadmap = the complete list of steps (5-8 short titles), in order.
-- lesson = the FULL lesson content for roadmap step 1 ONLY.
-- whatToDo must be an array of concrete, actionable instructions (include real links/commands where useful, e.g. actual download URLs).
+- goal = the learning goal, phrased clearly, with 1 emoji.
+- roadmap = the FULL journey needed to go from complete beginner to confidently capable in this skill — do not shorten it artificially. Use as many steps as genuinely needed (typically 10-16), covering setup, fundamentals, core concepts, hands-on practice/projects, and advanced/real-world topics, in logical order. Keep each step title SHORT (max ~6 words) since it's shown in a compact list.
+- lesson = the FULL lesson content for roadmap step 1 ONLY, and it must be THOROUGH and DETAILED — this is the learner's only guide for this step, so do not be brief.
+- Step 1 must always be the very first practical beginner action for this specific skill — e.g. for a coding skill this usually means installing the right code editor (like VS Code) and any required extension/compiler/SDK, named specifically, with exact download links and clear click-by-click instructions on where to go and what to click.
+- whatYouLearn: write 3-5 full sentences giving real depth, not a one-liner.
+- whyImportant: write 3-4 full sentences with genuine reasoning and context, not a generic platitude.
+- whatToDo: an array of 4-7 detailed, concrete, actionable steps. Each item should be a full instruction (a full sentence or two), including exact tool names, exact download links, exact menu items/buttons to click, and exact commands where relevant — assume the learner has zero prior context and needs everything spelled out.
+- Use small, tasteful emojis throughout whatYouLearn, whyImportant, and whatToDo to keep the tone warm and encouraging (1-2 emojis per field, not excessive).
 - Never teach step 2 or later.
 - Never return anything except the JSON object.
 
@@ -84,13 +95,15 @@ Return ONLY this structure:
   "title": "string",
   "whatYouLearn": "string",
   "whyImportant": "string",
-  "whatToDo": ["string", "string", "string"],
-  "miniTask": "string"
+  "whatToDo": ["string", "string", "string"]
 }
 
 Rules:
-- This lesson must teach ONLY step ${stepIndex + 1} ("${stepTitle}").
-- whatToDo must be an array of concrete, actionable instructions (real links/commands/tools where relevant).
+- This lesson must teach ONLY step ${stepIndex + 1} ("${stepTitle}"), and it must be THOROUGH and DETAILED — this is the learner's only guide for this step, so do not be brief.
+- whatYouLearn: write 3-5 full sentences giving real depth, not a one-liner.
+- whyImportant: write 3-4 full sentences with genuine reasoning and context, not a generic platitude.
+- whatToDo: an array of 4-7 detailed, concrete, actionable steps. Each item should be a full instruction (a full sentence or two), including exact tool names, exact links/commands/buttons where relevant — assume the learner needs everything spelled out.
+- Use small, tasteful emojis throughout whatYouLearn, whyImportant, and whatToDo to keep the tone warm and encouraging (1-2 emojis per field, not excessive).
 - Never reference or teach any other step.
 - Never return anything except the JSON object.
 `;
@@ -106,9 +119,27 @@ Rules:
 
     // ---------------------------------------------------------
     // MODE 3: Answer a question scoped to the current lesson
+    // Supports optional image attachments and reference links
     // ---------------------------------------------------------
     if (mode === "question") {
-      const { lessonTitle, question } = body;
+      const { lessonTitle, question, images, links } = body as {
+        lessonTitle: string;
+        question: string;
+        images?: string[];
+        links?: string[];
+      };
+
+      const linkContext =
+        links && links.length > 0
+          ? `\n\nThe learner also shared these reference link(s) for context (you cannot browse them, but consider what they likely are based on the URL and the question): ${links.join(
+              ", "
+            )}`
+          : "";
+
+      const imageContext =
+        images && images.length > 0
+          ? `\n\nThe learner also attached ${images.length} image(s) — look at them carefully and use them to answer.`
+          : "";
 
       const prompt = `
 You are NEXUS AI, an AI mentor.
@@ -124,15 +155,37 @@ Return ONLY this structure:
 Rules:
 - The learner is currently on this lesson: "${lessonTitle}"
 - Answer ONLY the learner's question below, in the context of this lesson.
+- If image(s) are attached, describe/use what you see in them as part of your answer (e.g. spot errors in a screenshot, read on-screen text, confirm setup steps).
 - Do NOT generate a roadmap or a new lesson.
-- Keep the reply focused and practical.
+- Keep the reply focused, practical, and friendly, with a light touch of emojis (1-2 max).
+${linkContext}${imageContext}
 
 Student question: ${question}
 `;
 
+      const parts: (
+  | { text: string }
+  | {
+      inlineData: {
+        mimeType: string;
+        data: string;
+      };
+    }
+)[] = [
+  {
+    text: prompt,
+  },
+];
+      if (images && images.length > 0) {
+        for (const img of images) {
+          const { mimeType, data } = parseDataUrl(img);
+          parts.push({ inlineData: { mimeType, data } });
+        }
+      }
+
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: prompt,
+        contents: [{ role: "user", parts }],
       });
 
       const parsed = JSON.parse(cleanJson(response.text ?? ""));
