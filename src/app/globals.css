@@ -452,6 +452,198 @@ transform:scale(1.1);
     z-index:10;
     display:flex;
     flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:40px 20px;
+    overflow-y:auto;
+}
+
+.career-container{
+    width:100%;
+    max-width:760px;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+}
+
+.skill-screen{
+    width:100%;
+    max-width:600px;
+    text-align:center;
+    color:white;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:16px;
+}
+
+.skill-screen h1{
+    font-size:32px;
+    color:white;
+}
+
+.skill-subtitle{
+    color:#c9c9c9;
+    font-size:15px;
+}
+
+.skill-screen textarea{
+    width:100%;
+    min-height:100px;
+    background:#0d0d0d;
+    border:1px solid #00ff99;
+    border-radius:12px;
+    color:white;
+    font-size:16px;
+    padding:14px;
+    resize:none;
+    outline:none;
+}
+
+.chat-card{
+    width:100%;
+    background:rgba(10,10,10,0.9);
+    border:1px solid #00ff99;
+    border-radius:20px;
+    padding:36px;
+    color:white;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    box-shadow:0 0 40px rgba(0,255,153,0.15);
+}
+
+.chat-card h1,
+.chat-card h2,
+.chat-card h3{
+    color:white;
+}
+
+.chat-card p,
+.chat-card li{
+    color:#e6e6e6;
+    line-height:1.6;
+}
+
+.chat-card hr{
+    border:none;
+    border-top:1px solid rgba(0,255,153,0.3);
+    margin:18px 0;
+}
+
+.roadmap-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-bottom:8px;
+}
+
+.roadmap-step{
+    color:#d9d9d9;
+    font-size:15px;
+}
+
+.roadmap-step-active{
+    color:white;
+    font-weight:bold;
+}
+
+.loading-text{
+    color:#00ff99;
+    text-align:center;
+    padding:20px 0;
+}
+
+.finished-text{
+    color:#00ff99;
+    text-align:center;
+    font-weight:bold;
+    margin-top:12px;
+}
+
+.step-chat-history{
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    margin-bottom:12px;
+    max-height:260px;
+    overflow-y:auto;
+    padding-right:6px;
+}
+
+.step-chat-entry{
+    background:#0d0d0d;
+    border:1px solid rgba(0,255,153,0.25);
+    border-radius:12px;
+    padding:12px 14px;
+}
+
+.step-chat-question{
+    color:white;
+    font-weight:600;
+    margin-bottom:6px;
+}
+
+.step-chat-answer{
+    color:#d9d9d9;
+}
+
+.chat-card textarea{
+    width:100%;
+    min-height:70px;
+    background:#0d0d0d;
+    border:1px solid rgba(0,255,153,0.4);
+    border-radius:10px;
+    color:white;
+    font-size:15px;
+    padding:12px;
+    resize:none;
+    outline:none;
+    margin-top:8px;
+}
+
+.primary-button,
+.secondary-button,
+.done-button{
+    border:none;
+    border-radius:10px;
+    padding:12px 22px;
+    font-size:15px;
+    font-weight:bold;
+    cursor:pointer;
+    margin-top:10px;
+}
+
+.primary-button{
+    background:#00ff99;
+    color:black;
+    width:100%;
+}
+
+.primary-button:disabled{
+    opacity:0.6;
+    cursor:not-allowed;
+}
+
+.secondary-button{
+    background:transparent;
+    color:#00ff99;
+    border:1px solid #00ff99;
+}
+
+.secondary-button:disabled{
+    opacity:0.6;
+    cursor:not-allowed;
+}
+
+.done-button{
+    background:#00ff99;
+    color:black;
+    display:block;
+    margin-left:auto;
+    margin-right:auto;
+    margin-top:20px;
 }
 
 .messages-area{
