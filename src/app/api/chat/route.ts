@@ -51,11 +51,11 @@ Return ONLY this structure:
 Rules:
 - goal = the learning goal, phrased clearly, with 1 emoji.
 - roadmap = the FULL journey needed to go from complete beginner to confidently capable in this skill — do not shorten it artificially. Use as many steps as genuinely needed (typically 10-16), covering setup, fundamentals, core concepts, hands-on practice/projects, and advanced/real-world topics, in logical order. Keep each step title SHORT (max ~6 words) since it's shown in a compact list.
-- lesson = the FULL lesson content for roadmap step 1 ONLY, and it must be THOROUGH and DETAILED — this is the learner's only guide for this step, so do not be brief.
+- lesson = the FULL lesson content for roadmap step 1 ONLY, and it must be EXTREMELY thorough and detailed — this is the learner's only guide for this step, so leave nothing vague or assumed.
 - Step 1 must always be the very first practical beginner action for this specific skill — e.g. for a coding skill this usually means installing the right code editor (like VS Code) and any required extension/compiler/SDK, named specifically, with exact download links and clear click-by-click instructions on where to go and what to click.
-- whatYouLearn: write 3-5 full sentences giving real depth, not a one-liner.
-- whyImportant: write 3-4 full sentences with genuine reasoning and context, not a generic platitude.
-- whatToDo: an array of 4-7 detailed, concrete, actionable steps. Each item should be a full instruction (a full sentence or two), including exact tool names, exact download links, exact menu items/buttons to click, and exact commands where relevant — assume the learner has zero prior context and needs everything spelled out.
+- whatYouLearn: write 4-6 full sentences giving real depth — explain the concept itself, not just that it exists.
+- whyImportant: write 4-5 full sentences with genuine reasoning, real-world context, and what goes wrong if this step is skipped or done poorly.
+- whatToDo: an array of 5-8 detailed, concrete, actionable steps. Each item MUST be 2-3 full sentences, spelling out exact tool names, exact download links, exact menu items/buttons/settings to click, exact commands to type, and expected results after each action — assume the learner has zero prior context and cannot infer anything you don't say explicitly.
 - Use small, tasteful emojis throughout whatYouLearn, whyImportant, and whatToDo to keep the tone warm and encouraging (1-2 emojis per field, not excessive).
 - Never teach step 2 or later.
 - Never return anything except the JSON object.
@@ -99,10 +99,10 @@ Return ONLY this structure:
 }
 
 Rules:
-- This lesson must teach ONLY step ${stepIndex + 1} ("${stepTitle}"), and it must be THOROUGH and DETAILED — this is the learner's only guide for this step, so do not be brief.
-- whatYouLearn: write 3-5 full sentences giving real depth, not a one-liner.
-- whyImportant: write 3-4 full sentences with genuine reasoning and context, not a generic platitude.
-- whatToDo: an array of 4-7 detailed, concrete, actionable steps. Each item should be a full instruction (a full sentence or two), including exact tool names, exact links/commands/buttons where relevant — assume the learner needs everything spelled out.
+- This lesson must teach ONLY step ${stepIndex + 1} ("${stepTitle}"), and it must be EXTREMELY thorough and detailed — this is the learner's only guide for this step, so leave nothing vague or assumed.
+- whatYouLearn: write 4-6 full sentences giving real depth — explain the concept itself, not just that it exists.
+- whyImportant: write 4-5 full sentences with genuine reasoning, real-world context, and what goes wrong if this step is skipped or done poorly.
+- whatToDo: an array of 5-8 detailed, concrete, actionable steps. Each item MUST be 2-3 full sentences, spelling out exact tool names, exact links/commands/buttons/settings, and expected results after each action — assume the learner needs everything spelled out.
 - Use small, tasteful emojis throughout whatYouLearn, whyImportant, and whatToDo to keep the tone warm and encouraging (1-2 emojis per field, not excessive).
 - Never reference or teach any other step.
 - Never return anything except the JSON object.
@@ -163,19 +163,10 @@ ${linkContext}${imageContext}
 Student question: ${question}
 `;
 
-      const parts: (
-  | { text: string }
-  | {
-      inlineData: {
-        mimeType: string;
-        data: string;
-      };
-    }
-)[] = [
-  {
-    text: prompt,
-  },
-];
+      const parts: Array<
+        { text: string } | { inlineData: { mimeType: string; data: string } }
+      > = [{ text: prompt }];
+
       if (images && images.length > 0) {
         for (const img of images) {
           const { mimeType, data } = parseDataUrl(img);

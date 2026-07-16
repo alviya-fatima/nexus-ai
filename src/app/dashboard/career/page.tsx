@@ -259,11 +259,10 @@ export default function CareerPage() {
           )}
 
           {started && (
-            <div className="chat-card">
-              {/* Pinned header: goal + compact roadmap */}
-              <div className="chat-card-header">
+            <>
+              {/* BOX 1: Roadmap — its own separate card, bigger text */}
+              <div className="roadmap-card">
                 <h1>🎯 {goal}</h1>
-
                 <h2>🗺️ Your Roadmap to Conquer</h2>
                 <p className="roadmap-intro">
                   Here's everything you'll work through, step by step, to get there 👇
@@ -288,213 +287,219 @@ export default function CareerPage() {
                 </div>
               </div>
 
-              <hr />
+              {/* BOX 2+: Scrollable feed — each step gets its own lesson box + its own ask box */}
+              <div className="lesson-feed-card">
+                <div className="steps-feed" ref={feedRef}>
+                  {steps.map((step, i) => {
+                    const isActive = i === activeStepIndex;
 
-              {/* Scrollable feed: every step ever generated stays here */}
-              <div className="steps-feed" ref={feedRef}>
-                {steps.map((step, i) => {
-                  const isActive = i === activeStepIndex;
+                    return (
+                      <div key={step.index} className="step-block">
+                        {/* Separate box: the lesson content itself */}
+                        <div className="step-lesson-box">
+                          <h2>
+                            📚 Step {step.index + 1}: {step.lesson.title}
+                          </h2>
 
-                  return (
-                    <div key={step.index} className="step-block">
-                      <h2>
-                        📚 Step {step.index + 1}: {step.lesson.title}
-                      </h2>
+                          <div className="lesson-bubble bubble-learn">
+                            <h3>📖 What You'll Learn</h3>
+                            <p>{step.lesson.whatYouLearn}</p>
+                          </div>
 
-                      <div className="lesson-bubble bubble-learn">
-                        <h3>📖 What You'll Learn</h3>
-                        <p>{step.lesson.whatYouLearn}</p>
-                      </div>
+                          <div className="lesson-bubble bubble-why">
+                            <h3>💡 Why It's Important</h3>
+                            <p>{step.lesson.whyImportant}</p>
+                          </div>
 
-                      <div className="lesson-bubble bubble-why">
-                        <h3>💡 Why It's Important</h3>
-                        <p>{step.lesson.whyImportant}</p>
-                      </div>
-
-                      <div className="lesson-bubble bubble-todo">
-                        <h3>📝 What To Do</h3>
-                        <ul>
-                          {step.lesson.whatToDo.map((task, index) => (
-                            <li key={index}>{task}</li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {step.chat.length > 0 && (
-                        <div className="gpt-thread">
-                          {step.chat.map((entry, index) => (
-                            <div key={index} className="gpt-exchange">
-                          {step.chat.length > 0 && (
-  <div className="gpt-thread">
-    {step.chat.map((entry, index) => (
-      <div key={index} className="gpt-exchange">
-        <div className="gpt-msg gpt-msg-user">
-          {entry.attachments &&
-            entry.attachments.length > 0 && (
-              <div className="gpt-attachments">
-                {entry.attachments.map((att) =>
-                  att.kind === "image" ? (
-                    <img
-                      key={att.id}
-                      src={att.dataUrl}
-                      alt={att.name}
-                      className="gpt-attachment-image"
-                    />
-                  ) : (
-                    <a
-                      key={att.id}
-                      href={att.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="gpt-attachment-link"
-                    >
-                      🔗 {att.url}
-                    </a>
-                  )
-                )}
-              </div>
-            )}
-
-          {entry.question && <p>{entry.question}</p>}
-        </div>
-
-        <div className="gpt-msg gpt-msg-assistant">
-          <span className="gpt-avatar">🤖</span>
-          <p>{entry.answer}</p>
-        </div>
-      </div>
-    ))}
-  </div>
-)}
-                            </div>
-                          ))}
+                          <div className="lesson-bubble bubble-todo">
+                            <h3>📝 What To Do</h3>
+                            <ul>
+                              {step.lesson.whatToDo.map((task, index) => (
+                                <li key={index}>{task}</li>
+                              ))}
+                            </ul>
+                          </div>
                         </div>
-                      )}
 
-                      {isActive && (
-                        <>
+                        {/* Separate box: ask about this step + its chat thread */}
+                        <div className="step-ask-box">
                           <h3 className="ask-heading">
-                            💬 Ask anything about this step
+                            💬 Ask anything about Step {step.index + 1}
                           </h3>
 
-                          {attachments.length > 0 && (
-                            <div className="composer-attachments">
-                              {attachments.map((att) => (
-                                <div key={att.id} className="composer-chip">
-                                  {att.kind === "image" ? (
-                                    <img
-                                      src={att.dataUrl}
-                                      alt={att.name}
-                                      className="composer-chip-image"
-                                    />
-                                  ) : (
-                                    <span className="composer-chip-link">
-                                      🔗 {att.url}
-                                    </span>
-                                  )}
-                                  <button
-                                    className="composer-chip-remove"
-                                    onClick={() => removeAttachment(att.id)}
-                                    aria-label="Remove attachment"
-                                  >
-                                    ✕
-                                  </button>
+                          {step.chat.length > 0 && (
+                            <div className="gpt-thread">
+                              {step.chat.map((entry, index) => (
+                                <div key={index} className="gpt-exchange">
+                                  <div className="gpt-msg gpt-msg-user">
+                                    {entry.attachments &&
+                                      entry.attachments.length > 0 && (
+                                        <div className="gpt-attachments">
+                                          {entry.attachments.map((att) =>
+                                            att.kind === "image" ? (
+                                              <img
+                                                key={att.id}
+                                                src={att.dataUrl}
+                                                alt={att.name}
+                                                className="gpt-attachment-image"
+                                              />
+                                            ) : (
+                                              <a
+                                                key={att.id}
+                                                href={att.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="gpt-attachment-link"
+                                              >
+                                                🔗 {att.url}
+                                              </a>
+                                            )
+                                          )}
+                                        </div>
+                                      )}
+                                    {entry.question && <p>{entry.question}</p>}
+                                  </div>
+
+                                  <div className="gpt-msg gpt-msg-assistant">
+                                    <span className="gpt-avatar">🤖</span>
+                                    <p>{entry.answer}</p>
+                                  </div>
                                 </div>
                               ))}
                             </div>
                           )}
 
-                          {linkInputOpen && (
-                            <div className="link-input-row">
-                              <input
-                                type="text"
-                                value={linkDraft}
-                                placeholder="Paste a link..."
-                                onChange={(e) => setLinkDraft(e.target.value)}
+                          {isActive && (
+                            <>
+                              {attachments.length > 0 && (
+                                <div className="composer-attachments">
+                                  {attachments.map((att) => (
+                                    <div key={att.id} className="composer-chip">
+                                      {att.kind === "image" ? (
+                                        <img
+                                          src={att.dataUrl}
+                                          alt={att.name}
+                                          className="composer-chip-image"
+                                        />
+                                      ) : (
+                                        <span className="composer-chip-link">
+                                          🔗 {att.url}
+                                        </span>
+                                      )}
+                                      <button
+                                        className="composer-chip-remove"
+                                        onClick={() => removeAttachment(att.id)}
+                                        aria-label="Remove attachment"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {linkInputOpen && (
+                                <div className="link-input-row">
+                                  <input
+                                    type="text"
+                                    value={linkDraft}
+                                    placeholder="Paste a link..."
+                                    onChange={(e) =>
+                                      setLinkDraft(e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        addLinkAttachment();
+                                      }
+                                    }}
+                                  />
+                                  <button onClick={addLinkAttachment}>
+                                    Add
+                                  </button>
+                                </div>
+                              )}
+
+                              <textarea
+                                value={question}
+                                placeholder={`Ask about Step ${
+                                  step.index + 1
+                                }...`}
+                                onChange={(e) => setQuestion(e.target.value)}
                                 onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
+                                  if (e.key === "Enter" && !e.shiftKey) {
                                     e.preventDefault();
-                                    addLinkAttachment();
+                                    askQuestion();
                                   }
                                 }}
                               />
-                              <button onClick={addLinkAttachment}>Add</button>
-                            </div>
+
+                              <div className="composer-toolbar">
+                                <input
+                                  ref={fileInputRef}
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  hidden
+                                  onChange={(e) =>
+                                    handleFilesSelected(e.target.files)
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  className="icon-button"
+                                  onClick={() => fileInputRef.current?.click()}
+                                  title="Upload image"
+                                >
+                                  📷 Image
+                                </button>
+                                <button
+                                  type="button"
+                                  className="icon-button"
+                                  onClick={() => setLinkInputOpen((v) => !v)}
+                                  title="Add link"
+                                >
+                                  🔗 Link
+                                </button>
+
+                                <button
+                                  className="secondary-button"
+                                  onClick={askQuestion}
+                                  disabled={asking}
+                                >
+                                  {asking ? "Thinking..." : "Ask NEXUS AI"}
+                                </button>
+                              </div>
+
+                              {finished ? (
+                                <p className="finished-text">
+                                  🎉 You've completed every step in this
+                                  roadmap!
+                                </p>
+                              ) : (
+                                <button
+                                  className="done-button"
+                                  onClick={markDone}
+                                  disabled={lessonLoading}
+                                >
+                                  {lessonLoading
+                                    ? "Loading next step..."
+                                    : "✅ Done — Next Step"}
+                                </button>
+                              )}
+                            </>
                           )}
+                        </div>
 
-                          <textarea
-                            value={question}
-                            placeholder={`Ask about Step ${step.index + 1}...`}
-                            onChange={(e) => setQuestion(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                askQuestion();
-                              }
-                            }}
-                          />
-
-                          <div className="composer-toolbar">
-                            <input
-                              ref={fileInputRef}
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              hidden
-                              onChange={(e) =>
-                                handleFilesSelected(e.target.files)
-                              }
-                            />
-                            <button
-                              type="button"
-                              className="icon-button"
-                              onClick={() => fileInputRef.current?.click()}
-                              title="Upload image"
-                            >
-                              📷 Image
-                            </button>
-                            <button
-                              type="button"
-                              className="icon-button"
-                              onClick={() => setLinkInputOpen((v) => !v)}
-                              title="Add link"
-                            >
-                              🔗 Link
-                            </button>
-
-                            <button
-                              className="secondary-button"
-                              onClick={askQuestion}
-                              disabled={asking}
-                            >
-                              {asking ? "Thinking..." : "Ask NEXUS AI"}
-                            </button>
-                          </div>
-
-                          {finished ? (
-                            <p className="finished-text">
-                              🎉 You've completed every step in this roadmap!
-                            </p>
-                          ) : (
-                            <button
-                              className="done-button"
-                              onClick={markDone}
-                              disabled={lessonLoading}
-                            >
-                              {lessonLoading
-                                ? "Loading next step..."
-                                : "✅ Done — Next Step"}
-                            </button>
-                          )}
-                        </>
-                      )}
-
-                      {i < steps.length - 1 && <hr className="step-divider" />}
-                    </div>
-                  );
-                })}
+                        {i < steps.length - 1 && (
+                          <hr className="step-divider" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
