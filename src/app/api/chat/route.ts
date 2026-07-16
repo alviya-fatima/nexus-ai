@@ -50,7 +50,8 @@ Return ONLY this structure:
 
 Rules:
 - goal = the learning goal, phrased clearly, with 1 emoji.
-- roadmap = the FULL journey needed to go from complete beginner to confidently capable in this skill — do not shorten it artificially. Use as many steps as genuinely needed (typically 10-16), covering setup, fundamentals, core concepts, hands-on practice/projects, and advanced/real-world topics, in logical order. Keep each step title SHORT (max ~6 words) since it's shown in a compact list.
+- roadmap = the FULL journey needed to go from complete beginner to confidently capable in this skill — do not shorten it artificially. Use as many steps as genuinely needed (typically 10-16), covering setup, fundamentals, core concepts, hands-on practice/projects, and advanced/real-world topics, in logical order.
+- Each roadmap step must be a genuinely descriptive phrase (aim for 8-14 words), not just a short label — it should clearly convey WHAT the learner will do and WHY it matters at that stage, while still reading as one scannable line (e.g. "Install VS Code and configure the C++ compiler toolchain for your OS" rather than just "Install VS Code").
 - lesson = the FULL lesson content for roadmap step 1 ONLY, and it must be EXTREMELY thorough and detailed — this is the learner's only guide for this step, so leave nothing vague or assumed.
 - Step 1 must always be the very first practical beginner action for this specific skill — e.g. for a coding skill this usually means installing the right code editor (like VS Code) and any required extension/compiler/SDK, named specifically, with exact download links and clear click-by-click instructions on where to go and what to click.
 - whatYouLearn: write 4-6 full sentences giving real depth — explain the concept itself, not just that it exists.
