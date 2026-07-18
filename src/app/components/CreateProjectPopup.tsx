@@ -54,12 +54,18 @@ export default function CreateProjectPopup({
           />
         </button>
 
-        {/* Button 2 */}
+        {/* Button 2 - Project, Presentation & Research Studio */}
 
-        <button className="popup-btn btn2">
+        <button
+          className="popup-btn btn2"
+          onClick={() => {
+            onClose();
+            router.push("/dashboard/task-helper");
+          }}
+        >
           <Image
             src="/btn2.png"
-            alt="Button 2"
+            alt="Task Helper"
             width={260}
             height={60}
             priority
