@@ -56,22 +56,34 @@ export default function CreateProjectPopup({
 
         {/* Button 2 - Project, Presentation & Research Studio */}
 
-        <button className="popup-btn btn2">
-  <Image
-    src="/btn2.png"
-    alt="Project, Presentation & Research Studio"
-    width={260}
-    height={60}
-    priority
-  />
-</button>
+        <button
+          className="popup-btn btn2"
+          onClick={() => {
+            onClose();
+            router.push("/dashboard/task-helper");
+          }}
+        >
+          <Image
+            src="/btn2.png"
+            alt="Task Helper"
+            width={260}
+            height={60}
+            priority
+          />
+        </button>
 
-        {/* Button 3 */}
+        {/* Button 3 - AI Companion & Mock Interview */}
 
-        <button className="popup-btn btn3">
+        <button
+          className="popup-btn btn3"
+          onClick={() => {
+            onClose();
+            router.push("/dashboard/companion");
+          }}
+        >
           <Image
             src="/btn3.png"
-            alt="Button 3"
+            alt="AI Companion & Mock Interview"
             width={260}
             height={60}
             priority
@@ -92,21 +104,15 @@ export default function CreateProjectPopup({
 
         {/* Button 5 */}
 
-        <button
-  className="popup-btn btn5"
-  onClick={() => {
-    onClose();
-    router.push("/dashboard/task-helper");
-  }}
->
-  <Image
-    src="/btn5.png"
-    alt="Quick Assist Studio"
-    width={260}
-    height={60}
-    priority
-  />
-</button>
+        <button className="popup-btn btn5">
+          <Image
+            src="/btn5.png"
+            alt="Button 5"
+            width={260}
+            height={60}
+            priority
+          />
+        </button>
 
         {/* Cancel Button */}
 
