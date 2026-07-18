@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { auth } from "../../firebase/config";
+import { auth } from "../firebase/config";
 import { supabase } from "../../lib/supabaseClient";
 
 type Message = { role: "user" | "assistant"; text: string };

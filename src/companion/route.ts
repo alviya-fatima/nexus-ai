@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { saveMemory, getUserProfileFacts } from "@/app/lib/supermemory";
+import { saveMemory, getUserProfileFacts } from "../lib/supermemory";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY!,
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
         const facts = await getUserProfileFacts(userId, message);
         if (facts.length > 0) {
           memoryContext = `\n\nWhat you remember about this person from past conversations (use naturally, don't force it in):\n${facts
-            .map((f) => `- ${f}`)
+            .map((f: string) => `- ${f}`)
             .join("\n")}`;
         }
       }
@@ -99,7 +99,7 @@ The person just said: ${message}
         const facts = await getUserProfileFacts(userId, role);
         if (facts.length > 0) {
           memoryContext = `\n\nWhat you remember about this person from past sessions:\n${facts
-            .map((f) => `- ${f}`)
+            .map((f: string) => `- ${f}`)
             .join("\n")}`;
         }
       }
