@@ -56,21 +56,15 @@ export default function CreateProjectPopup({
 
         {/* Button 2 - Project, Presentation & Research Studio */}
 
-        <button
-          className="popup-btn btn2"
-          onClick={() => {
-            onClose();
-            router.push("/dashboard/task-helper");
-          }}
-        >
-          <Image
-            src="/btn2.png"
-            alt="Task Helper"
-            width={260}
-            height={60}
-            priority
-          />
-        </button>
+        <button className="popup-btn btn2">
+  <Image
+    src="/btn2.png"
+    alt="Project, Presentation & Research Studio"
+    width={260}
+    height={60}
+    priority
+  />
+</button>
 
         {/* Button 3 */}
 
@@ -98,15 +92,21 @@ export default function CreateProjectPopup({
 
         {/* Button 5 */}
 
-        <button className="popup-btn btn5">
-          <Image
-            src="/btn5.png"
-            alt="Button 5"
-            width={260}
-            height={60}
-            priority
-          />
-        </button>
+        <button
+  className="popup-btn btn5"
+  onClick={() => {
+    onClose();
+    router.push("/dashboard/task-helper");
+  }}
+>
+  <Image
+    src="/btn5.png"
+    alt="Quick Assist Studio"
+    width={260}
+    height={60}
+    priority
+  />
+</button>
 
         {/* Cancel Button */}
 
