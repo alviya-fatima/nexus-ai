@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { saveMemory, getUserProfileFacts } from "../lib/supermemory";
+import { saveMemory, getUserProfileFacts } from "../../../../lib/supermemory";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY!,
