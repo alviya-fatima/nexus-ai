@@ -998,3 +998,10 @@ transform:scale(1.1);
     border-radius:14px;
     margin-bottom:14px;
 }
+.voice-status-text{
+    text-align:center;
+    color:#00ff99;
+    font-size:14px;
+    font-weight:bold;
+    margin:8px 0 4px;
+}

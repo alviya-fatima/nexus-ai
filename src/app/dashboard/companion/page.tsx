@@ -27,6 +27,7 @@ type InterviewReport = {
 };
 
 type Phase = "chat" | "interview-setup" | "interviewing" | "report";
+type VoiceStatus = "idle" | "listening" | "thinking" | "speaking";
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -44,19 +45,25 @@ export default function CompanionPage() {
 
   const [phase, setPhase] = useState<Phase>("chat");
 
-  // General voice chat
+  // General voice-only chat
   const [messages, setMessages] = useState<Message[]>([]);
-  const [listening, setListening] = useState(false);
-  const [thinking, setThinking] = useState(false);
+  const [voiceChatActive, setVoiceChatActive] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
+  const voiceChatActiveRef = useRef(false);
 
-  // Interview setup
+  // Interview mic (push-to-talk, unchanged)
+  const [listening, setListening] = useState(false);
+
+  // Interview setup — resume is now a PDF upload, not a text box
   const [resumeText, setResumeText] = useState("");
+  const [resumeFileName, setResumeFileName] = useState("");
+  const [resumeUploading, setResumeUploading] = useState(false);
+  const [resumeError, setResumeError] = useState("");
   const [role, setRole] = useState("");
   const [experienceLevel, setExperienceLevel] = useState("Entry-level");
   const [startingInterview, setStartingInterview] = useState(false);
 
   // Interview in progress
-  const [interviewIntro, setInterviewIntro] = useState("");
   const [questions, setQuestions] = useState<string[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [transcript, setTranscript] = useState<QAPair[]>([]);
@@ -68,6 +75,7 @@ export default function CompanionPage() {
 
   const recognitionRef = useRef<any>(null);
   const sessionIdRef = useRef<string>(makeId());
+  const resumeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -161,14 +169,36 @@ export default function CompanionPage() {
     setListening(false);
   }
 
-  // ---------------- General voice chat ----------------
+  // ---------------- General voice-only chat (continuous loop) ----------------
+
+  function startVoiceChat() {
+    voiceChatActiveRef.current = true;
+    setVoiceChatActive(true);
+    setVoiceStatus("listening");
+    startListening(handleUserSpeech);
+  }
+
+  function stopVoiceChat() {
+    voiceChatActiveRef.current = false;
+    setVoiceChatActive(false);
+    setVoiceStatus("idle");
+    stopListening();
+    window.speechSynthesis?.cancel();
+  }
 
   async function handleUserSpeech(text: string) {
-    if (!text.trim()) return;
+    if (!text.trim()) {
+      // Didn't catch anything — if voice chat is still active, listen again
+      if (voiceChatActiveRef.current) {
+        setVoiceStatus("listening");
+        startListening(handleUserSpeech);
+      }
+      return;
+    }
 
     const newMessages: Message[] = [...messages, { role: "user", text }];
     setMessages(newMessages);
-    setThinking(true);
+    setVoiceStatus("thinking");
 
     try {
       const res = await fetch("/api/companion", {
@@ -186,20 +216,73 @@ export default function CompanionPage() {
       const reply = data.reply ?? "Sorry, I didn't quite catch that.";
 
       setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
-      setThinking(false);
-      speak(reply);
+      setVoiceStatus("speaking");
+
+      speak(reply, () => {
+        if (voiceChatActiveRef.current) {
+          setVoiceStatus("listening");
+          startListening(handleUserSpeech);
+        } else {
+          setVoiceStatus("idle");
+        }
+      });
     } catch (error) {
       console.error(error);
-      setThinking(false);
+      if (voiceChatActiveRef.current) {
+        setVoiceStatus("listening");
+        startListening(handleUserSpeech);
+      } else {
+        setVoiceStatus("idle");
+      }
     }
   }
 
-  function handleMicClick() {
-    if (listening) {
-      stopListening();
+  // ---------------- Resume upload (PDF only) ----------------
+
+  async function handleResumeFileSelected(fileList: FileList | null) {
+    const file = fileList?.[0];
+    if (!file) return;
+
+    if (file.type !== "application/pdf") {
+      setResumeError("Please upload a PDF file.");
       return;
     }
-    startListening(handleUserSpeech);
+
+    setResumeUploading(true);
+    setResumeError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("resume", file);
+
+      const res = await fetch("/api/parse-resume", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setResumeError(data.error ?? "Failed to read that PDF.");
+        setResumeText("");
+        setResumeFileName("");
+      } else {
+        setResumeText(data.text);
+        setResumeFileName(data.fileName ?? file.name);
+      }
+    } catch (error) {
+      console.error(error);
+      setResumeError("Failed to read that PDF.");
+    }
+
+    setResumeUploading(false);
+    if (resumeInputRef.current) resumeInputRef.current.value = "";
+  }
+
+  function clearResume() {
+    setResumeText("");
+    setResumeFileName("");
+    setResumeError("");
   }
 
   // ---------------- Mock interview flow ----------------
@@ -223,7 +306,6 @@ export default function CompanionPage() {
 
       const data = await res.json();
 
-      setInterviewIntro(data.introMessage);
       setQuestions(data.questions);
       setCurrentQuestionIndex(0);
       setTranscript([]);
@@ -298,18 +380,25 @@ export default function CompanionPage() {
 
   function startNewSession() {
     sessionIdRef.current = makeId();
+    stopVoiceChat();
     setPhase("chat");
     setMessages([]);
-    setResumeText("");
+    clearResume();
     setRole("");
     setExperienceLevel("Entry-level");
-    setInterviewIntro("");
     setQuestions([]);
     setCurrentQuestionIndex(0);
     setTranscript([]);
     setCurrentAnswer("");
     setReport(null);
   }
+
+  const voiceStatusLabel: Record<VoiceStatus, string> = {
+    idle: "🎤 Start Voice Chat",
+    listening: "🎙️ Listening...",
+    thinking: "🤔 Thinking...",
+    speaking: "🔊 Speaking...",
+  };
 
   return (
     <main className="career-page">
@@ -332,54 +421,44 @@ export default function CompanionPage() {
             </div>
           )}
 
-          {/* ---------------- CHAT PHASE ---------------- */}
+          {/* ---------------- CHAT PHASE (voice only, no text bubbles) ---------------- */}
           {phase === "chat" && (
-            <>
-              <div className="roadmap-card">
-                <h1>🎙️ Talk to NEXUS AI</h1>
-                <p className="roadmap-intro">
-                  Tap the mic and talk — about a problem, a project, how
-                  you're feeling, anything. Or start a mock interview below.
-                </p>
+            <div className="roadmap-card">
+              <h1>🎙️ Talk to NEXUS AI</h1>
+              <p className="roadmap-intro">
+                This is a voice-only conversation — NEXUS AI listens and
+                replies out loud. Talk about a problem, a project, how you're
+                feeling, anything.
+              </p>
 
-                <button
-                  className={`mic-button ${listening ? "mic-button-listening" : ""}`}
-                  onClick={handleMicClick}
-                  disabled={thinking}
-                >
-                  {listening ? "🎙️ Listening..." : "🎤"}
+              <button
+                className={`mic-button ${
+                  voiceStatus !== "idle" ? "mic-button-listening" : ""
+                }`}
+                onClick={voiceChatActive ? undefined : startVoiceChat}
+                disabled={voiceChatActive}
+              >
+                {voiceChatActive ? "🎙️" : "🎤"}
+              </button>
+
+              <p className="voice-status-text">{voiceStatusLabel[voiceStatus]}</p>
+
+              {voiceChatActive && (
+                <button className="secondary-button" onClick={stopVoiceChat}>
+                  ⏹️ End Voice Chat
                 </button>
-
-                {thinking && <p className="loading-text">NEXUS AI is thinking...</p>}
-
-                <button
-                  className="secondary-button"
-                  onClick={() => setPhase("interview-setup")}
-                >
-                  🎯 Start Mock Interview
-                </button>
-              </div>
-
-              {messages.length > 0 && (
-                <div className="lesson-feed-card">
-                  <div className="gpt-thread">
-                    {messages.map((m, i) => (
-                      <div
-                        key={i}
-                        className={`gpt-msg ${
-                          m.role === "user" ? "gpt-msg-user" : "gpt-msg-assistant"
-                        }`}
-                      >
-                        {m.role === "assistant" && (
-                          <span className="gpt-avatar">🤖</span>
-                        )}
-                        <p>{m.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               )}
-            </>
+
+              <button
+                className="icon-button"
+                onClick={() => {
+                  stopVoiceChat();
+                  setPhase("interview-setup");
+                }}
+              >
+                🎯 Start Mock Interview
+              </button>
+            </div>
           )}
 
           {/* ---------------- INTERVIEW SETUP PHASE ---------------- */}
@@ -391,13 +470,44 @@ export default function CompanionPage() {
                 interview.
               </p>
 
-              <p className="step-ask-box-label">Paste your resume / background</p>
-              <textarea
-                className="companion-textarea"
-                value={resumeText}
-                placeholder="Paste your resume text here (experience, skills, education, projects)..."
-                onChange={(e) => setResumeText(e.target.value)}
+              <p className="step-ask-box-label">Upload your resume / CV (PDF)</p>
+
+              <input
+                ref={resumeInputRef}
+                type="file"
+                accept="application/pdf"
+                hidden
+                onChange={(e) => handleResumeFileSelected(e.target.files)}
               />
+
+              {!resumeFileName ? (
+                <button
+                  className="icon-button"
+                  onClick={() => resumeInputRef.current?.click()}
+                  disabled={resumeUploading}
+                >
+                  {resumeUploading ? "Reading PDF..." : "📄 Upload Resume (PDF)"}
+                </button>
+              ) : (
+                <div className="composer-chip">
+                  <span className="composer-chip-link">
+                    ✅ {resumeFileName}
+                  </span>
+                  <button
+                    className="composer-chip-remove"
+                    onClick={clearResume}
+                    aria-label="Remove resume"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {resumeError && (
+                <p className="finished-text" style={{ color: "#ff6b6b" }}>
+                  ⚠️ {resumeError}
+                </p>
+              )}
 
               <p className="step-ask-box-label">Role you're interviewing for</p>
               <input
@@ -421,16 +531,13 @@ export default function CompanionPage() {
               </select>
 
               <div className="composer-toolbar">
-                <button
-                  className="icon-button"
-                  onClick={() => setPhase("chat")}
-                >
+                <button className="icon-button" onClick={() => setPhase("chat")}>
                   ← Back
                 </button>
                 <button
                   className="primary-button"
                   onClick={beginInterview}
-                  disabled={startingInterview}
+                  disabled={startingInterview || !resumeText.trim() || !role.trim()}
                 >
                   {startingInterview ? "Preparing..." : "🚀 Begin Interview"}
                 </button>
