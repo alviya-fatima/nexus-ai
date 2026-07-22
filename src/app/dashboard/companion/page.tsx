@@ -38,6 +38,15 @@ function getSpeechRecognition(): (new () => any) | null {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 export default function CompanionPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -51,10 +60,7 @@ export default function CompanionPage() {
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
   const voiceChatActiveRef = useRef(false);
 
-  // Interview mic (push-to-talk, unchanged)
-  const [listening, setListening] = useState(false);
-
-  // Interview setup — resume is now a PDF upload, not a text box
+  // Interview setup — resume is a PDF upload, not a text box
   const [resumeText, setResumeText] = useState("");
   const [resumeFileName, setResumeFileName] = useState("");
   const [resumeUploading, setResumeUploading] = useState(false);
@@ -63,17 +69,28 @@ export default function CompanionPage() {
   const [experienceLevel, setExperienceLevel] = useState("Entry-level");
   const [startingInterview, setStartingInterview] = useState(false);
 
-  // Interview in progress
+  // Interview in progress — fully voice-driven, no text/manual submit
   const [questions, setQuestions] = useState<string[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [transcript, setTranscript] = useState<QAPair[]>([]);
-  const [currentAnswer, setCurrentAnswer] = useState("");
+  const [interviewVoiceStatus, setInterviewVoiceStatus] =
+    useState<VoiceStatus>("idle");
+  const interviewActiveRef = useRef(false);
+  const questionsRef = useRef<string[]>([]);
+  const currentQuestionIndexRef = useRef(0);
 
   // Report
   const [report, setReport] = useState<InterviewReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
 
+  // Listening (native SpeechRecognition OR universal mic-recording fallback)
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const silenceRafRef = useRef<number | null>(null);
+
+  // Speaking (Gemini TTS played through a plain <audio> element)
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const sessionIdRef = useRef<string>(makeId());
   const resumeInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,8 +106,12 @@ export default function CompanionPage() {
   }, [router]);
 
   useEffect(() => {
-    const SpeechRecognitionCtor = getSpeechRecognition();
-    setVoiceSupported(!!SpeechRecognitionCtor);
+    const hasNative = !!getSpeechRecognition();
+    const hasFallback =
+      typeof navigator !== "undefined" &&
+      !!navigator.mediaDevices &&
+      typeof window.MediaRecorder !== "undefined";
+    setVoiceSupported(hasNative || hasFallback);
   }, []);
 
   // Persist session to Supabase whenever anything meaningful changes
@@ -120,53 +141,180 @@ export default function CompanionPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, transcript, report, user]);
 
-  function speak(text: string, onEnd?: () => void) {
-    if (typeof window === "undefined" || !window.speechSynthesis) {
+  // ---------------- Speaking: always via Gemini TTS + <audio> (universal) ----------------
+
+  async function speak(text: string, onEnd?: () => void) {
+    try {
+      const res = await fetch("/api/companion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "speak", text }),
+      });
+
+      const data = await res.json();
+
+      if (!data.audioBase64) {
+        onEnd?.();
+        return;
+      }
+
+      const audio = new Audio(data.audioBase64);
+      audioRef.current = audio;
+      audio.onended = () => onEnd?.();
+      audio.onerror = () => onEnd?.();
+      await audio.play();
+    } catch (error) {
+      console.error("Speak failed:", error);
       onEnd?.();
-      return;
     }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    if (onEnd) utterance.onend = onEnd;
-    window.speechSynthesis.speak(utterance);
   }
 
-  function startListening(onFinalTranscript: (text: string) => void) {
+  function stopSpeaking() {
+    audioRef.current?.pause();
+    audioRef.current = null;
+  }
+
+  // ---------------- Listening: native SpeechRecognition, else universal mic + Gemini ----------------
+
+  async function transcribeBlob(blob: Blob): Promise<string> {
+    const dataUrl = await blobToDataUrl(blob);
+    const res = await fetch("/api/companion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "transcribe",
+        audioBase64: dataUrl,
+        mimeType: blob.type,
+      }),
+    });
+    const data = await res.json();
+    return data.text ?? "";
+  }
+
+  async function recordWithSilenceDetection(
+    onFinalTranscript: (text: string) => void
+  ) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const AudioCtx =
+        window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+        ? "audio/mp4"
+        : "";
+
+      const recorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined
+      );
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        audioCtx.close();
+        if (silenceRafRef.current) cancelAnimationFrame(silenceRafRef.current);
+
+        const blob = new Blob(chunks, {
+          type: recorder.mimeType || mimeType || "audio/webm",
+        });
+
+        try {
+          const text = await transcribeBlob(blob);
+          onFinalTranscript(text);
+        } catch (err) {
+          console.error(err);
+          onFinalTranscript("");
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+
+      let silenceStart: number | null = null;
+      const SILENCE_RMS_THRESHOLD = 10;
+      const SILENCE_DURATION_MS = 1400;
+      const startedAt = Date.now();
+
+      function checkVolume() {
+        analyser.getByteTimeDomainData(dataArray);
+        let sumSquares = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = dataArray[i] - 128;
+          sumSquares += v * v;
+        }
+        const rms = Math.sqrt(sumSquares / dataArray.length);
+
+        if (rms < SILENCE_RMS_THRESHOLD) {
+          if (silenceStart === null) silenceStart = Date.now();
+          else if (
+            Date.now() - silenceStart > SILENCE_DURATION_MS &&
+            Date.now() - startedAt > 800
+          ) {
+            if (recorder.state !== "inactive") recorder.stop();
+            return;
+          }
+        } else {
+          silenceStart = null;
+        }
+
+        if (Date.now() - startedAt > 25000) {
+          if (recorder.state !== "inactive") recorder.stop();
+          return;
+        }
+
+        silenceRafRef.current = requestAnimationFrame(checkVolume);
+      }
+
+      checkVolume();
+    } catch (err) {
+      console.error("Microphone access failed:", err);
+      onFinalTranscript("");
+    }
+  }
+
+  function listen(onFinalTranscript: (text: string) => void) {
     const SpeechRecognitionCtor = getSpeechRecognition();
-    if (!SpeechRecognitionCtor) {
-      setVoiceSupported(false);
+
+    if (SpeechRecognitionCtor) {
+      const recognition = new SpeechRecognitionCtor();
+      recognition.lang = "en-US";
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onresult = (event: any) => {
+        const result = event.results[event.results.length - 1];
+        onFinalTranscript(result[0].transcript);
+      };
+      recognition.onerror = () => onFinalTranscript("");
+
+      recognitionRef.current = recognition;
+      recognition.start();
       return;
     }
 
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = "en-US";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onresult = (event: any) => {
-      const result = event.results[event.results.length - 1];
-      const text = result[0].transcript;
-      onFinalTranscript(text);
-    };
-
-    recognition.onend = () => {
-      setListening(false);
-    };
-
-    recognition.onerror = () => {
-      setListening(false);
-    };
-
-    recognitionRef.current = recognition;
-    setListening(true);
-    recognition.start();
+    // Universal fallback: record until silence, then transcribe via Gemini
+    recordWithSilenceDetection(onFinalTranscript);
   }
 
-  function stopListening() {
+  function stopListen() {
     recognitionRef.current?.stop();
-    setListening(false);
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      mediaRecorderRef.current.stop();
+    }
   }
 
   // ---------------- General voice-only chat (continuous loop) ----------------
@@ -175,23 +323,22 @@ export default function CompanionPage() {
     voiceChatActiveRef.current = true;
     setVoiceChatActive(true);
     setVoiceStatus("listening");
-    startListening(handleUserSpeech);
+    listen(handleUserSpeech);
   }
 
   function stopVoiceChat() {
     voiceChatActiveRef.current = false;
     setVoiceChatActive(false);
     setVoiceStatus("idle");
-    stopListening();
-    window.speechSynthesis?.cancel();
+    stopListen();
+    stopSpeaking();
   }
 
   async function handleUserSpeech(text: string) {
     if (!text.trim()) {
-      // Didn't catch anything — if voice chat is still active, listen again
       if (voiceChatActiveRef.current) {
         setVoiceStatus("listening");
-        startListening(handleUserSpeech);
+        listen(handleUserSpeech);
       }
       return;
     }
@@ -221,7 +368,7 @@ export default function CompanionPage() {
       speak(reply, () => {
         if (voiceChatActiveRef.current) {
           setVoiceStatus("listening");
-          startListening(handleUserSpeech);
+          listen(handleUserSpeech);
         } else {
           setVoiceStatus("idle");
         }
@@ -230,7 +377,7 @@ export default function CompanionPage() {
       console.error(error);
       if (voiceChatActiveRef.current) {
         setVoiceStatus("listening");
-        startListening(handleUserSpeech);
+        listen(handleUserSpeech);
       } else {
         setVoiceStatus("idle");
       }
@@ -285,7 +432,7 @@ export default function CompanionPage() {
     setResumeError("");
   }
 
-  // ---------------- Mock interview flow ----------------
+  // ---------------- Mock interview flow (fully voice-driven) ----------------
 
   async function beginInterview() {
     if (!role.trim() || !resumeText.trim() || startingInterview) return;
@@ -306,16 +453,19 @@ export default function CompanionPage() {
 
       const data = await res.json();
 
+      questionsRef.current = data.questions;
+      currentQuestionIndexRef.current = 0;
+
       setQuestions(data.questions);
       setCurrentQuestionIndex(0);
       setTranscript([]);
       setReport(null);
       setPhase("interviewing");
+      interviewActiveRef.current = true;
 
+      setInterviewVoiceStatus("speaking");
       speak(data.introMessage, () => {
-        if (data.questions.length > 0) {
-          speak(data.questions[0]);
-        }
+        askQuestion(0);
       });
     } catch (error) {
       console.error(error);
@@ -324,34 +474,58 @@ export default function CompanionPage() {
     setStartingInterview(false);
   }
 
-  function handleInterviewAnswer(text: string) {
-    setCurrentAnswer(text);
+  function askQuestion(index: number) {
+    if (!interviewActiveRef.current) return;
+
+    const q = questionsRef.current[index];
+    if (!q) return;
+
+    setInterviewVoiceStatus("speaking");
+    speak(q, () => {
+      if (!interviewActiveRef.current) return;
+      setInterviewVoiceStatus("listening");
+      listen(handleInterviewAnswer);
+    });
   }
 
-  function submitAnswerAndAdvance() {
-    const question = questions[currentQuestionIndex];
-    const updatedTranscript = [
-      ...transcript,
-      { question, answer: currentAnswer },
-    ];
-    setTranscript(updatedTranscript);
-    setCurrentAnswer("");
+  function handleInterviewAnswer(text: string) {
+    if (!interviewActiveRef.current) return;
 
-    const nextIndex = currentQuestionIndex + 1;
-
-    if (nextIndex >= questions.length) {
-      generateReport(updatedTranscript);
+    if (!text.trim()) {
+      setInterviewVoiceStatus("listening");
+      listen(handleInterviewAnswer);
       return;
     }
 
-    setCurrentQuestionIndex(nextIndex);
-    speak(questions[nextIndex]);
+    setInterviewVoiceStatus("thinking");
+
+    const index = currentQuestionIndexRef.current;
+    const question = questionsRef.current[index];
+
+    setTranscript((prev) => {
+      const updated = [...prev, { question, answer: text }];
+
+      const nextIndex = index + 1;
+      if (nextIndex >= questionsRef.current.length) {
+        interviewActiveRef.current = false;
+        generateReport(updated);
+      } else {
+        currentQuestionIndexRef.current = nextIndex;
+        setCurrentQuestionIndex(nextIndex);
+        askQuestion(nextIndex);
+      }
+
+      return updated;
+    });
   }
 
   async function generateReport(finalTranscript: QAPair[]) {
+    interviewActiveRef.current = false;
+    stopListen();
+    stopSpeaking();
+    setInterviewVoiceStatus("idle");
     setReportLoading(true);
     setPhase("report");
-    window.speechSynthesis?.cancel();
 
     try {
       const res = await fetch("/api/companion", {
@@ -381,6 +555,10 @@ export default function CompanionPage() {
   function startNewSession() {
     sessionIdRef.current = makeId();
     stopVoiceChat();
+    interviewActiveRef.current = false;
+    stopListen();
+    stopSpeaking();
+
     setPhase("chat");
     setMessages([]);
     clearResume();
@@ -389,7 +567,7 @@ export default function CompanionPage() {
     setQuestions([]);
     setCurrentQuestionIndex(0);
     setTranscript([]);
-    setCurrentAnswer("");
+    setInterviewVoiceStatus("idle");
     setReport(null);
   }
 
@@ -398,6 +576,13 @@ export default function CompanionPage() {
     listening: "🎙️ Listening...",
     thinking: "🤔 Thinking...",
     speaking: "🔊 Speaking...",
+  };
+
+  const interviewStatusLabel: Record<VoiceStatus, string> = {
+    idle: "",
+    listening: "🎙️ Listening for your answer...",
+    thinking: "🤔 Processing your answer...",
+    speaking: "🔊 Asking the question...",
   };
 
   return (
@@ -415,13 +600,14 @@ export default function CompanionPage() {
           {!voiceSupported && (
             <div className="roadmap-card">
               <p>
-                ⚠️ Voice input isn't supported in this browser. Please use
-                Chrome or Edge for the full voice experience.
+                ⚠️ This browser doesn't support microphone access. Please use
+                a modern browser (Chrome, Edge, Firefox, or Safari) for the
+                voice experience.
               </p>
             </div>
           )}
 
-          {/* ---------------- CHAT PHASE (voice only, no text bubbles) ---------------- */}
+          {/* ---------------- CHAT PHASE (voice only) ---------------- */}
           {phase === "chat" && (
             <div className="roadmap-card">
               <h1>🎙️ Talk to NEXUS AI</h1>
@@ -466,8 +652,8 @@ export default function CompanionPage() {
             <div className="roadmap-card">
               <h1>🎯 Set Up Your Mock Interview</h1>
               <p className="roadmap-intro">
-                Give NEXUS AI what it needs to run a realistic, tailored
-                interview.
+                Give NEXUS AI what it needs to run a realistic, tailored,
+                fully voice-driven interview.
               </p>
 
               <p className="step-ask-box-label">Upload your resume / CV (PDF)</p>
@@ -545,78 +731,31 @@ export default function CompanionPage() {
             </div>
           )}
 
-          {/* ---------------- INTERVIEWING PHASE ---------------- */}
+          {/* ---------------- INTERVIEWING PHASE (voice only) ---------------- */}
           {phase === "interviewing" && (
-            <>
-              <div className="roadmap-card">
-                <h1>🎯 Mock Interview: {role}</h1>
-                <p className="roadmap-intro">
-                  Question {currentQuestionIndex + 1} of {questions.length}
-                </p>
-                <div className="interview-question-box">
-                  {questions[currentQuestionIndex]}
-                </div>
+            <div className="roadmap-card">
+              <h1>🎯 Mock Interview: {role}</h1>
+              <p className="roadmap-intro">
+                Question {currentQuestionIndex + 1} of {questions.length}
+              </p>
+
+              <div
+                className={`mic-button ${
+                  interviewVoiceStatus !== "idle" ? "mic-button-listening" : ""
+                }`}
+                style={{ pointerEvents: "none" }}
+              >
+                🎙️
               </div>
 
-              <div className="lesson-feed-card">
-                <div className="step-ask-box">
-                  <h3 className="ask-heading">🎙️ Your Answer</h3>
+              <p className="voice-status-text">
+                {interviewStatusLabel[interviewVoiceStatus]}
+              </p>
 
-                  <button
-                    className={`mic-button ${listening ? "mic-button-listening" : ""}`}
-                    onClick={() => {
-                      if (listening) {
-                        stopListening();
-                        return;
-                      }
-                      startListening(handleInterviewAnswer);
-                    }}
-                  >
-                    {listening ? "🎙️ Listening..." : "🎤"}
-                  </button>
-
-                  <textarea
-                    className="companion-textarea"
-                    value={currentAnswer}
-                    placeholder="Your spoken answer will appear here — you can also type/edit it..."
-                    onChange={(e) => setCurrentAnswer(e.target.value)}
-                  />
-
-                  <div className="composer-toolbar">
-                    <button
-                      className="secondary-button"
-                      onClick={submitAnswerAndAdvance}
-                      disabled={!currentAnswer.trim()}
-                    >
-                      {currentQuestionIndex + 1 >= questions.length
-                        ? "✅ Submit Final Answer"
-                        : "➡️ Submit & Next Question"}
-                    </button>
-                    <button className="icon-button" onClick={endInterviewEarly}>
-                      ⏹️ End Interview Now
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {transcript.length > 0 && (
-                <div className="lesson-feed-card">
-                  <div className="gpt-thread">
-                    {transcript.map((qa, i) => (
-                      <div key={i} className="gpt-exchange">
-                        <div className="gpt-msg gpt-msg-assistant">
-                          <span className="gpt-avatar">🤖</span>
-                          <p>{qa.question}</p>
-                        </div>
-                        <div className="gpt-msg gpt-msg-user">
-                          <p>{qa.answer}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
+              <button className="secondary-button" onClick={endInterviewEarly}>
+                ⏹️ End Interview Now
+              </button>
+            </div>
           )}
 
           {/* ---------------- REPORT PHASE ---------------- */}

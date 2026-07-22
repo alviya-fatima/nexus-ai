@@ -90,12 +90,18 @@ export default function CreateProjectPopup({
           />
         </button>
 
-        {/* Button 4 */}
+        {/* Button 4 - Language Learning Studio */}
 
-        <button className="popup-btn btn4">
+        <button
+          className="popup-btn btn4"
+          onClick={() => {
+            onClose();
+            router.push("/dashboard/language");
+          }}
+        >
           <Image
             src="/btn4.png"
-            alt="Button 4"
+            alt="Language Learning Studio"
             width={260}
             height={60}
             priority

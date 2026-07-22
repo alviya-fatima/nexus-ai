@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { saveMemory, getUserProfileFacts } from "../../../../lib/supermemory";
+import { saveMemory, getUserProfileFacts } from "@/lib/supermemory";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY!,
@@ -10,6 +10,51 @@ function cleanJson(text: string) {
     .replace(/```json/g, "")
     .replace(/```/g, "")
     .trim();
+}
+
+function parseDataUrl(dataUrl: string): { mimeType: string; data: string } {
+  const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
+  if (!match) {
+    return { mimeType: "audio/webm", data: dataUrl };
+  }
+  return { mimeType: match[1], data: match[2] };
+}
+
+// Gemini TTS returns raw 16-bit PCM — wrap it in a WAV header so any
+// browser's <audio> element can play it directly.
+function pcmToWavDataUrl(
+  pcmBase64: string,
+  sampleRate: number,
+  channels = 1,
+  bitDepth = 16
+): string {
+  const pcmBuffer = Buffer.from(pcmBase64, "base64");
+  const byteRate = sampleRate * channels * (bitDepth / 8);
+  const blockAlign = channels * (bitDepth / 8);
+  const dataSize = pcmBuffer.length;
+
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitDepth, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(dataSize, 40);
+
+  const wavBuffer = Buffer.concat([header, pcmBuffer]);
+  return `data:audio/wav;base64,${wavBuffer.toString("base64")}`;
+}
+
+function parsePcmSampleRate(mimeType: string): number {
+  const match = mimeType.match(/rate=(\d+)/);
+  return match ? parseInt(match[1], 10) : 24000;
 }
 
 type HistoryTurn = { role: "user" | "assistant"; text: string };
@@ -32,7 +77,7 @@ export async function POST(req: Request) {
 
       let memoryContext = "";
       if (userId) {
-        const facts = await getUserProfileFacts(userId, message);
+        const facts = (await getUserProfileFacts(userId, message)) as string[];
         if (facts.length > 0) {
           memoryContext = `\n\nWhat you remember about this person from past conversations (use naturally, don't force it in):\n${facts
             .map((f: string) => `- ${f}`)
@@ -220,17 +265,86 @@ Rules:
       return Response.json(parsed);
     }
 
-    return Response.json({ error: "Unknown mode." }, { status: 400 });
-  } catch (err) {
-    console.error(err);
+    // ---------------------------------------------------------
+    // MODE: Transcribe recorded speech (works in ANY browser that
+    // can record audio — not limited to Chrome's SpeechRecognition)
+    // ---------------------------------------------------------
+    if (mode === "transcribe") {
+      const { audioBase64, mimeType } = body as {
+        audioBase64: string;
+        mimeType?: string;
+      };
 
+      const parsed = parseDataUrl(audioBase64);
+      const effectiveMimeType = mimeType || parsed.mimeType;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: "Transcribe this speech exactly, word for word. Reply with ONLY the transcription — no quotes, no commentary, no extra text. If there is no discernible speech, reply with nothing at all.",
+              },
+              {
+                inlineData: {
+                  mimeType: effectiveMimeType,
+                  data: parsed.data,
+                },
+              },
+            ],
+          },
+        ],
+      });
+
+      const text = (response.text ?? "").trim();
+      return Response.json({ text });
+    }
+
+    // ---------------------------------------------------------
+    // MODE: Convert text to spoken audio using Gemini's native TTS
+    // (works in ANY browser via a plain <audio> element)
+    // ---------------------------------------------------------
+    if (mode === "speak") {
+      const { text, voiceName } = body as {
+        text: string;
+        voiceName?: string;
+      };
+
+      const request: any = {
+        model: "gemini-2.5-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [{ text }],
+          },
+        ],
+      };
+      request.modalities = ["audio"];
+      request.audio = {
+        voice: voiceName || "alloy",
+        format: "pcm16",
+      };
+
+      const response = await ai.models.generateContent(request);
+      const audioItem = (response as any).audio?.[0];
+      const audioBase64 = audioItem?.data as string | undefined;
+      const sampleRate = parsePcmSampleRate(
+        (audioItem?.mimeType as string) ?? "rate=24000"
+      );
+      const audioUrl = audioBase64
+        ? pcmToWavDataUrl(audioBase64, sampleRate)
+        : "";
+
+      return Response.json({ audioUrl });
+    }
+
+    return Response.json({ error: "Invalid mode" }, { status: 400 });
+  } catch (error) {
     return Response.json(
-      {
-        error: "Something went wrong.",
-      },
-      {
-        status: 500,
-      }
+      { error: "Internal server error" },
+      { status: 500 }
     );
   }
 }
