@@ -205,17 +205,17 @@ Question: ${question}
     }
 
     // ---------------------------------------------------------
-    // MODE 4: Generate a quiz testing the current lesson's words
+    // MODE 4: Generate a Duolingo-style mixed-format quiz
     // ---------------------------------------------------------
     if (mode === "quiz") {
       const { lessonTitle, words, userId } = body as {
         lessonTitle: string;
-        words: { word: string; pronunciation: string; meaning: string }[];
+        words: { word: string; pronunciation: string; meaning: string; usageExample: string }[];
         userId?: string;
       };
 
       const prompt = `
-You are NEXUS AI, a language tutor creating a short quiz to test whether the learner has picked up the vocabulary from this lesson: "${lessonTitle}"
+You are NEXUS AI, a language tutor creating an intense, Duolingo-style test for this lesson: "${lessonTitle}"
 
 Vocabulary taught in this lesson:
 ${JSON.stringify(words)}
@@ -227,19 +227,51 @@ Return ONLY this structure:
 {
   "questions": [
     {
-      "question": "string",
+      "type": "multiple_choice",
+      "prompt": "string",
       "options": ["string", "string", "string", "string"],
-      "correctIndex": number,
+      "correctAnswer": "string",
+      "explanation": "string"
+    },
+    {
+      "type": "translate_to_target",
+      "prompt": "string",
+      "correctAnswer": "string",
+      "explanation": "string"
+    },
+    {
+      "type": "translate_to_english",
+      "prompt": "string",
+      "correctAnswer": "string",
+      "explanation": "string"
+    },
+    {
+      "type": "listening",
+      "prompt": "string",
+      "speakText": "string",
+      "correctAnswer": "string",
+      "explanation": "string"
+    },
+    {
+      "type": "word_bank",
+      "prompt": "string",
+      "wordBank": ["string", "string", "string", "string", "string", "string"],
+      "correctAnswer": "string",
       "explanation": "string"
     }
   ]
 }
 
 Rules:
-- Generate exactly 5 multiple-choice questions covering a good spread of the vocabulary above (meaning, usage, or recognition).
-- Each question has exactly 4 options, only one correct.
-- correctIndex is the 0-based index of the correct option.
-- explanation: 1 short sentence explaining the correct answer, shown after the learner answers.
+- Generate exactly 10 questions, mixing ALL 5 types above, drawn from and testing the vocabulary above thoroughly and rigorously — like a real Duolingo unit test, not a casual quiz.
+- "multiple_choice": prompt asks for the meaning/translation of a word; 4 options, one correct.
+- "translate_to_target": prompt gives an English word/phrase from the lesson; correctAnswer is the target-language word/phrase (accept the exact word taught).
+- "translate_to_english": prompt gives a target-language word/phrase; correctAnswer is the English meaning.
+- "listening": speakText is a word/phrase from the lesson to be spoken aloud (via TTS); prompt instructs the learner to type what they hear; correctAnswer matches speakText exactly.
+- "word_bank": prompt is a short sentence-building instruction (e.g. "Build the sentence: I eat bread"); wordBank has 6 shuffled words/pieces (including 1-2 decoy words not needed) that can build correctAnswer (the exact target-language sentence, words separated by spaces) using only some of the bank.
+- Every correctAnswer must be an exact, unambiguous string so it can be checked programmatically (case-insensitive, trimmed).
+- explanation: 1 short sentence explaining the correct answer.
+- Order questions so difficulty escalates and types are well mixed, not grouped.
 - Never return anything except the JSON object.
 `;
 
@@ -253,7 +285,7 @@ Rules:
       if (userId) {
         void saveMemory(
           userId,
-          `User took a quiz for the lesson "${lessonTitle}".`,
+          `User took an intense Duolingo-style quiz for the lesson "${lessonTitle}".`,
           { type: "language_quiz" }
         );
       }
