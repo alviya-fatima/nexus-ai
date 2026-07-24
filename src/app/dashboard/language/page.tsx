@@ -3,90 +3,74 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { jsPDF } from "jspdf";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
 
-type VocabWord = {
-  word: string;
-  pronunciation: string;
-  meaning: string;
-  usageExample: string;
+type BudgetItem = {
+  item: string;
+  cheapOption: string;
+  estimatedCost: string;
+  whereToBuy: string;
 };
 
-type Lesson = {
+type ResearchSource = {
+  name: string;
+  url: string;
+  whatYoullFind: string;
+};
+
+type Plan = {
   title: string;
-  overview: string;
-  words: VocabWord[];
+  summary: string;
+  budgetOptions: BudgetItem[];
+  stepByStep: string[];
+  researchSources: ResearchSource[];
+  researchSummary: string;
+  designIdeas: string[];
 };
 
 type ChatEntry = { question: string; answer: string };
 
-type QuizQuestionType =
-  | "multiple_choice"
-  | "translate_to_target"
-  | "translate_to_english"
-  | "listening"
-  | "word_bank";
-
-type QuizQuestion = {
-  type: QuizQuestionType;
-  prompt: string;
-  options?: string[];
-  wordBank?: string[];
-  speakText?: string;
-  correctAnswer: string;
-  explanation: string;
+type DesignImageState = {
+  loading: boolean;
+  dataUrl: string | null;
+  error: string | null;
+  source: "gemini" | "pollinations" | null;
 };
 
-type LessonRecord = {
-  index: number;
-  lesson: Lesson;
-  chat: ChatEntry[];
-  quiz: QuizQuestion[] | null;
-  quizLoading: boolean;
-  quizIndex: number;
-  lives: number;
-  streak: number;
-  correctCount: number;
-  quizFinished: boolean;
-  lastResult: "correct" | "wrong" | null;
-};
+type ProjectIdea = { title: string; description: string };
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function normalize(s: string) {
-  return s.trim().toLowerCase().replace(/[.,!?]/g, "");
-}
-
-export default function LanguagePage() {
+export default function ProjectStudioPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
 
-  const [languageInput, setLanguageInput] = useState("");
+  const [brief, setBrief] = useState("");
+  const [requirements, setRequirements] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [goal, setGoal] = useState("");
-  const [langCode, setLangCode] = useState("en-US");
-  const [roadmap, setRoadmap] = useState<string[]>([]);
-  const [lessonRecords, setLessonRecords] = useState<LessonRecord[]>([]);
-  const [lessonLoading, setLessonLoading] = useState(false);
-  const [finished, setFinished] = useState(false);
+  // Theme-based idea picker (helps users who don't know what to make yet)
+  const [theme, setTheme] = useState("");
+  const [ideas, setIdeas] = useState<ProjectIdea[]>([]);
+  const [ideasLoading, setIdeasLoading] = useState(false);
+  const briefRef = useRef<HTMLTextAreaElement>(null);
 
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [chat, setChat] = useState<ChatEntry[]>([]);
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
 
-  const [answerDraft, setAnswerDraft] = useState("");
-  const [selectedWordBank, setSelectedWordBank] = useState<string[]>([]);
+  const [designImages, setDesignImages] = useState<DesignImageState[]>([]);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const sessionIdRef = useRef<string>(makeId());
-  const originalLanguageRef = useRef<string>("");
 
-  const started = roadmap.length > 0;
-  const activeIndex = lessonRecords.length - 1;
-  const activeRecord = lessonRecords[activeIndex];
+  const started = !!plan;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -100,7 +84,7 @@ export default function LanguagePage() {
   }, [router]);
 
   useEffect(() => {
-    if (!started || !user) return;
+    if (!plan || !user) return;
 
     const saveSession = async () => {
       try {
@@ -108,10 +92,10 @@ export default function LanguagePage() {
           {
             id: sessionIdRef.current,
             user_id: user.uid,
-            task: `Language: ${originalLanguageRef.current}`,
-            goal,
-            roadmap,
-            session_data: lessonRecords,
+            task: brief,
+            goal: plan.title,
+            roadmap: plan.stepByStep,
+            session_data: { plan, chat },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" }
@@ -123,54 +107,65 @@ export default function LanguagePage() {
 
     saveSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goal, roadmap, lessonRecords, started, user]);
+  }, [plan, chat, user]);
 
-  function speakWord(text: string) {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = langCode;
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
-  }
-
-  async function generateRoadmap() {
-    if (!languageInput.trim() || loading) return;
-    setLoading(true);
-    originalLanguageRef.current = languageInput;
+  async function suggestIdeas() {
+    if (!theme.trim() || ideasLoading) return;
+    setIdeasLoading(true);
 
     try {
-      const res = await fetch("/api/language", {
+      const res = await fetch("/api/project-studio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode: "start",
-          language: languageInput,
+          mode: "suggest_ideas",
+          theme,
           userId: user?.uid,
         }),
       });
 
       const data = await res.json();
+      setIdeas(data.ideas ?? []);
+    } catch (error) {
+      console.error(error);
+    }
 
-      setGoal(data.goal);
-      setLangCode(data.langCode || "en-US");
-      setRoadmap(data.roadmap);
-      setLessonRecords([
-        {
-          index: 0,
-          lesson: data.lesson,
-          chat: [],
-          quiz: null,
-          quizLoading: false,
-          quizIndex: 0,
-          lives: 3,
-          streak: 0,
-          correctCount: 0,
-          quizFinished: false,
-          lastResult: null,
-        },
-      ]);
-      setFinished(false);
+    setIdeasLoading(false);
+  }
+
+  function pickIdea(idea: ProjectIdea) {
+    setBrief(`${idea.title}: ${idea.description}`);
+    briefRef.current?.focus();
+    briefRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function generatePlan() {
+    if (!brief.trim() || !requirements.trim() || loading) return;
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/project-studio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "start",
+          brief,
+          requirements,
+          userId: user?.uid,
+        }),
+      });
+
+      const data: Plan = await res.json();
+      setPlan(data);
+      setDesignImages(
+        data.designIdeas.map(() => ({
+          loading: false,
+          dataUrl: null,
+          error: null,
+          source: null,
+        }))
+      );
+      setChat([]);
     } catch (error) {
       console.error(error);
     }
@@ -179,34 +174,26 @@ export default function LanguagePage() {
   }
 
   async function askQuestion() {
-    if (!question.trim() || asking || activeIndex < 0) return;
+    if (!question.trim() || asking || !plan) return;
 
-    const activeLesson = lessonRecords[activeIndex].lesson;
     const askedQuestion = question;
     setQuestion("");
     setAsking(true);
 
     try {
-      const res = await fetch("/api/language", {
+      const res = await fetch("/api/project-studio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "question",
-          lessonTitle: activeLesson.title,
+          title: plan.title,
           question: askedQuestion,
           userId: user?.uid,
         }),
       });
 
       const data = await res.json();
-
-      setLessonRecords((prev) =>
-        prev.map((rec, i) =>
-          i === activeIndex
-            ? { ...rec, chat: [...rec.chat, { question: askedQuestion, answer: data.reply ?? "" }] }
-            : rec
-        )
-      );
+      setChat((prev) => [...prev, { question: askedQuestion, answer: data.reply ?? "" }]);
     } catch (error) {
       console.error(error);
     }
@@ -214,168 +201,127 @@ export default function LanguagePage() {
     setAsking(false);
   }
 
-  async function startQuiz() {
-    if (activeIndex < 0) return;
+  async function generateDesignImage(index: number) {
+    if (!plan) return;
 
-    setLessonRecords((prev) =>
-      prev.map((rec, i) => (i === activeIndex ? { ...rec, quizLoading: true } : rec))
+    setDesignImages((prev) =>
+      prev.map((d, i) => (i === index ? { ...d, loading: true, error: null } : d))
     );
 
     try {
-      const res = await fetch("/api/language", {
+      const res = await fetch("/api/project-studio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode: "quiz",
-          lessonTitle: activeRecord.lesson.title,
-          words: activeRecord.lesson.words,
-          userId: user?.uid,
+          mode: "generate_image",
+          prompt: plan.designIdeas[index],
         }),
       });
 
       const data = await res.json();
 
-      setLessonRecords((prev) =>
-        prev.map((rec, i) =>
-          i === activeIndex
-            ? {
-                ...rec,
-                quiz: data.questions,
-                quizLoading: false,
-                quizIndex: 0,
-                lives: 3,
-                streak: 0,
-                correctCount: 0,
-                quizFinished: false,
-                lastResult: null,
-              }
-            : rec
+      if (!res.ok) {
+        setDesignImages((prev) =>
+          prev.map((d, i) =>
+            i === index ? { ...d, loading: false, error: data.error ?? "Failed to generate image." } : d
+          )
+        );
+        return;
+      }
+
+      setDesignImages((prev) =>
+        prev.map((d, i) =>
+          i === index
+            ? { loading: false, dataUrl: data.imageDataUrl, error: null, source: data.source ?? "gemini" }
+            : d
         )
       );
-      setAnswerDraft("");
-      setSelectedWordBank([]);
     } catch (error) {
       console.error(error);
-      setLessonRecords((prev) =>
-        prev.map((rec, i) => (i === activeIndex ? { ...rec, quizLoading: false } : rec))
+      setDesignImages((prev) =>
+        prev.map((d, i) => (i === index ? { ...d, loading: false, error: "Failed to generate image." } : d))
       );
     }
   }
 
-  function currentQuestion(): QuizQuestion | null {
-    if (!activeRecord?.quiz) return null;
-    return activeRecord.quiz[activeRecord.quizIndex] ?? null;
-  }
-
-  function submitAnswer(rawAnswer: string) {
-    const q = currentQuestion();
-    if (!q || activeRecord.lastResult) return;
-
-    const isCorrect = normalize(rawAnswer) === normalize(q.correctAnswer);
-
-    setLessonRecords((prev) =>
-      prev.map((rec, i) => {
-        if (i !== activeIndex) return rec;
-
-        const newLives = isCorrect ? rec.lives : rec.lives - 1;
-        return {
-          ...rec,
-          lastResult: isCorrect ? "correct" : "wrong",
-          streak: isCorrect ? rec.streak + 1 : 0,
-          correctCount: isCorrect ? rec.correctCount + 1 : rec.correctCount,
-          lives: newLives,
-        };
-      })
-    );
-  }
-
-  function nextQuestion() {
-    setAnswerDraft("");
-    setSelectedWordBank([]);
-
-    setLessonRecords((prev) =>
-      prev.map((rec, i) => {
-        if (i !== activeIndex || !rec.quiz) return rec;
-
-        const outOfLives = rec.lives <= 0;
-        const nextIndex = rec.quizIndex + 1;
-        const isLastQuestion = nextIndex >= rec.quiz.length;
-
-        if (outOfLives || isLastQuestion) {
-          return { ...rec, quizFinished: true, lastResult: null };
-        }
-
-        return { ...rec, quizIndex: nextIndex, lastResult: null };
-      })
-    );
-  }
-
-  function toggleWordBankPiece(piece: string) {
-    setSelectedWordBank((prev) =>
-      prev.includes(piece) ? prev.filter((p) => p !== piece) : [...prev, piece]
-    );
-  }
-
-  async function nextLesson() {
-    if (lessonLoading || activeIndex < 0) return;
-
-    const nextIndex = activeIndex + 1;
-
-    if (nextIndex >= roadmap.length) {
-      setFinished(true);
-      return;
-    }
-
-    setLessonLoading(true);
+  async function downloadPdf() {
+    if (!plan) return;
+    setGeneratingPdf(true);
 
     try {
-      const res = await fetch("/api/language", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "lesson",
-          goal,
-          roadmap,
-          lessonIndex: nextIndex,
-          userId: user?.uid,
-        }),
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 40;
+      const maxWidth = pageWidth - margin * 2;
+      let y = 50;
+
+      function addWrapped(text: string, fontSize: number, bold = false) {
+        doc.setFontSize(fontSize);
+        doc.setFont("helvetica", bold ? "bold" : "normal");
+        const lines = doc.splitTextToSize(text, maxWidth);
+        lines.forEach((line: string) => {
+          if (y > 780) {
+            doc.addPage();
+            y = 50;
+          }
+          doc.text(line, margin, y);
+          y += fontSize * 1.3;
+        });
+        y += 6;
+      }
+
+      addWrapped(plan.title, 20, true);
+      addWrapped(plan.summary, 11);
+
+      addWrapped("Budget-Friendly Materials", 14, true);
+      plan.budgetOptions.forEach((b) => {
+        addWrapped(
+          `• ${b.item}: ${b.cheapOption} (~${b.estimatedCost}) — ${b.whereToBuy}`,
+          10
+        );
       });
 
-      const data = await res.json();
+      addWrapped("Step-by-Step Guide", 14, true);
+      plan.stepByStep.forEach((s, i) => {
+        addWrapped(`${i + 1}. ${s}`, 10);
+      });
 
-      setLessonRecords((prev) => [
-        ...prev,
-        {
-          index: nextIndex,
-          lesson: data.lesson,
-          chat: [],
-          quiz: null,
-          quizLoading: false,
-          quizIndex: 0,
-          lives: 3,
-          streak: 0,
-          correctCount: 0,
-          quizFinished: false,
-          lastResult: null,
-        },
-      ]);
+      addWrapped("Research Sources", 14, true);
+      plan.researchSources.forEach((r) => {
+        addWrapped(`• ${r.name} (${r.url}) — ${r.whatYoullFind}`, 10);
+      });
+
+      addWrapped("Research Summary", 14, true);
+      addWrapped(plan.researchSummary, 10);
+
+      const generatedDesigns = designImages.filter((d) => d.dataUrl);
+      if (generatedDesigns.length > 0) {
+        addWrapped("Design Concepts", 14, true);
+        for (const design of generatedDesigns) {
+          if (y > 550) {
+            doc.addPage();
+            y = 50;
+          }
+          if (design.dataUrl) {
+            doc.addImage(design.dataUrl, "PNG", margin, y, 240, 240);
+            y += 260;
+          }
+        }
+      }
+
+      doc.save(`${plan.title.replace(/[^\w\s-]/g, "").trim() || "project-summary"}.pdf`);
     } catch (error) {
       console.error(error);
     }
 
-    setLessonLoading(false);
+    setGeneratingPdf(false);
   }
-
-  const q = currentQuestion();
-  const passed = activeRecord?.quiz
-    ? activeRecord.correctCount / activeRecord.quiz.length >= 0.8
-    : false;
 
   return (
     <main className="career-page">
       <Image
         src="/chat-area-v2.png"
-        alt="Language Learning Background"
+        alt="Project Studio Background"
         fill
         priority
         className="career-background"
@@ -385,326 +331,226 @@ export default function LanguagePage() {
         <div className="career-container">
           {!started && (
             <div className="skill-screen">
-              <h1>What language do you want to learn?</h1>
+              <h1>What do you want to make?</h1>
               <p className="skill-subtitle">
-                Type any language — NEXUS AI builds you a full lesson roadmap,
-                teaches you vocabulary with pronunciation, and tests you hard.
+                Tell NEXUS AI what you're building or presenting — it'll plan
+                the whole thing: cheap materials, step-by-step build
+                instructions, research, design concepts, and a downloadable
+                PDF summary.
               </p>
 
+              <div className="idea-picker-box">
+                <p className="step-ask-box-label">
+                  🤔 Not sure what to make yet? Give NEXUS AI a theme
+                </p>
+                <div className="composer-toolbar">
+                  <input
+                    className="companion-input"
+                    type="text"
+                    value={theme}
+                    placeholder="Example: robotics, environmental science, ancient history..."
+                    onChange={(e) => setTheme(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        suggestIdeas();
+                      }
+                    }}
+                  />
+                  <button
+                    className="icon-button"
+                    onClick={suggestIdeas}
+                    disabled={ideasLoading}
+                  >
+                    {ideasLoading ? "Thinking..." : "💡 Suggest Ideas"}
+                  </button>
+                </div>
+
+                {ideas.length > 0 && (
+                  <div className="vocab-grid">
+                    {ideas.map((idea, i) => (
+                      <button
+                        key={i}
+                        className="idea-card"
+                        onClick={() => pickIdea(idea)}
+                      >
+                        <div className="vocab-word">{idea.title}</div>
+                        <div className="vocab-meaning">{idea.description}</div>
+                        <span className="idea-card-pick">Tap to use this idea →</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <hr />
+
+              <p className="step-ask-box-label">What is it, and what's the situation?</p>
               <textarea
-                value={languageInput}
-                placeholder="Example: Spanish, Japanese, French..."
-                onChange={(e) => setLanguageInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    generateRoadmap();
-                  }
-                }}
+                ref={briefRef}
+                value={brief}
+                placeholder="Example: I have a math presentation due in 3 days and haven't started..."
+                onChange={(e) => setBrief(e.target.value)}
               />
 
-              <button className="primary-button" onClick={generateRoadmap} disabled={loading}>
-                {loading ? "Generating..." : "🚀 Generate Roadmap"}
+              <p className="step-ask-box-label">What requirements does it have to match?</p>
+              <textarea
+                value={requirements}
+                placeholder="Example: Must be 10 minutes long, cover derivatives, include a visual aid, budget under $20..."
+                onChange={(e) => setRequirements(e.target.value)}
+              />
+
+              <button
+                className="primary-button"
+                onClick={generatePlan}
+                disabled={loading}
+              >
+                {loading ? "Planning..." : "🚀 Generate Plan"}
               </button>
             </div>
           )}
 
-          {started && (
+          {started && plan && (
             <>
               <div className="roadmap-card">
-                <h1>🎯 {goal}</h1>
-                <h2>🗺️ Your Full Lesson Plan</h2>
-                <p className="roadmap-intro">Here's every lesson you'll work through, in order 👇</p>
-
-                <div className="roadmap-list">
-                  {roadmap.map((step, index) => (
-                    <div
-                      key={index}
-                      className={`roadmap-step ${index === activeIndex ? "roadmap-step-active" : ""}`}
-                    >
-                      {index < activeIndex ? "✅" : index === activeIndex ? "▶️" : "⬜"} {step}
-                    </div>
-                  ))}
-                </div>
+                <h1>🎯 {plan.title}</h1>
+                <p className="roadmap-intro">{plan.summary}</p>
+                <button
+                  className="secondary-button"
+                  onClick={downloadPdf}
+                  disabled={generatingPdf}
+                >
+                  {generatingPdf ? "Building PDF..." : "📄 Download PDF Summary"}
+                </button>
               </div>
 
               <div className="lesson-feed-card">
                 <div className="steps-feed">
-                  {lessonRecords.map((rec, i) => {
-                    const isActive = i === activeIndex;
+                  <div className="step-lesson-box">
+                    <h2>💰 Budget-Friendly Materials</h2>
+                    <div className="lesson-bubble bubble-learn">
+                      <ul>
+                        {plan.budgetOptions.map((b, i) => (
+                          <li key={i}>
+                            <strong>{b.item}:</strong> {b.cheapOption} (~{b.estimatedCost}) —{" "}
+                            {b.whereToBuy}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
 
-                    return (
-                      <div key={rec.index} className="step-block">
-                        <div className="step-lesson-box">
-                          <h2>📚 Lesson {rec.index + 1}: {rec.lesson.title}</h2>
+                    <h2>🛠️ Step-by-Step Guide</h2>
+                    <div className="lesson-bubble bubble-todo">
+                      <ul>
+                        {plan.stepByStep.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
 
-                          <div className="lesson-bubble bubble-learn">
-                            <h3>📖 Overview</h3>
-                            <p>{rec.lesson.overview}</p>
-                          </div>
+                    <h2>🔍 Research Sources</h2>
+                    <div className="lesson-bubble bubble-why">
+                      <ul>
+                        {plan.researchSources.map((r, i) => (
+                          <li key={i}>
+                            <a
+                              href={
+                                r.url.startsWith("http") ? r.url : `https://${r.url}`
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="gpt-attachment-link"
+                            >
+                              {r.name}
+                            </a>{" "}
+                            — {r.whatYoullFind}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
 
-                          <div className="vocab-grid">
-                            {rec.lesson.words.map((w, wi) => (
-                              <div key={wi} className="vocab-card">
-                                <div className="vocab-word">{w.word}</div>
-                                <div className="vocab-pronunciation">🗣️ {w.pronunciation}</div>
-                                <div className="vocab-meaning">{w.meaning}</div>
-                                <div className="vocab-example">{w.usageExample}</div>
-                                <button className="vocab-play-button" onClick={() => speakWord(w.word)}>
-                                  🔊 Play Pronunciation
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+                    <h2>📚 Research Summary</h2>
+                    <div className="lesson-bubble bubble-learn">
+                      <p>{plan.researchSummary}</p>
+                    </div>
 
-                        <div className="step-ask-box">
-                          <h3 className="ask-heading">💬 Ask anything about Lesson {rec.index + 1}</h3>
-
-                          {rec.chat.length > 0 && (
-                            <div className="gpt-thread">
-                              {rec.chat.map((entry, ci) => (
-                                <div key={ci} className="gpt-exchange">
-                                  <div className="gpt-msg gpt-msg-user"><p>{entry.question}</p></div>
-                                  <div className="gpt-msg gpt-msg-assistant">
-                                    <span className="gpt-avatar">🤖</span>
-                                    <p>{entry.answer}</p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {isActive && !rec.quiz && (
+                    <h2>🎨 Design Concepts</h2>
+                    <div className="vocab-grid">
+                      {plan.designIdeas.map((idea, i) => (
+                        <div key={i} className="vocab-card">
+                          <div className="vocab-meaning">{idea}</div>
+                          {designImages[i]?.dataUrl ? (
                             <>
-                              <textarea
-                                value={question}
-                                placeholder={`Ask about Lesson ${rec.index + 1}...`}
-                                onChange={(e) => setQuestion(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" && !e.shiftKey) {
-                                    e.preventDefault();
-                                    askQuestion();
-                                  }
-                                }}
+                              <img
+                                src={designImages[i].dataUrl!}
+                                alt={idea}
+                                className="design-generated-image"
                               />
-                              <div className="composer-toolbar">
-                                <button className="secondary-button" onClick={askQuestion} disabled={asking}>
-                                  {asking ? "Thinking..." : "Ask NEXUS AI"}
-                                </button>
-                                <button className="done-button" onClick={startQuiz} disabled={rec.quizLoading}>
-                                  {rec.quizLoading ? "Preparing test..." : "🔥 Take Intense Test"}
-                                </button>
-                              </div>
+                              <span className="image-source-note">
+                                {designImages[i].source === "pollinations"
+                                  ? "🆓 via Pollinations (free fallback)"
+                                  : "✨ via Gemini"}
+                              </span>
                             </>
+                          ) : (
+                            <button
+                              className="vocab-play-button"
+                              onClick={() => generateDesignImage(i)}
+                              disabled={designImages[i]?.loading}
+                            >
+                              {designImages[i]?.loading
+                                ? "Generating..."
+                                : "🎨 Generate Image"}
+                            </button>
+                          )}
+                          {designImages[i]?.error && (
+                            <p className="quiz-explanation">
+                              ⚠️ {designImages[i].error}
+                            </p>
                           )}
                         </div>
+                      ))}
+                    </div>
+                  </div>
 
-                        {isActive && rec.quiz && !rec.quizFinished && q && (
-                          <div className="quiz-box">
-                            <div className="quiz-hud">
-                              <span className="quiz-hud-lives">
-                                {"❤️".repeat(Math.max(rec.lives, 0))}
-                                {"🖤".repeat(Math.max(3 - rec.lives, 0))}
-                              </span>
-                              <span className="quiz-hud-progress">
-                                {rec.quizIndex + 1} / {rec.quiz.length}
-                              </span>
-                              <span className="quiz-hud-streak">🔥 {rec.streak}</span>
+                  <div className="step-ask-box">
+                    <h3 className="ask-heading">💬 Ask anything about this plan</h3>
+
+                    {chat.length > 0 && (
+                      <div className="gpt-thread">
+                        {chat.map((entry, i) => (
+                          <div key={i} className="gpt-exchange">
+                            <div className="gpt-msg gpt-msg-user">
+                              <p>{entry.question}</p>
                             </div>
-
-                            <div className="quiz-progress-bar">
-                              <div
-                                className="quiz-progress-fill"
-                                style={{ width: `${((rec.quizIndex) / rec.quiz.length) * 100}%` }}
-                              />
+                            <div className="gpt-msg gpt-msg-assistant">
+                              <span className="gpt-avatar">🤖</span>
+                              <p>{entry.answer}</p>
                             </div>
-
-                            <p className="quiz-question-text">{q.prompt}</p>
-
-                            {q.type === "multiple_choice" && (
-                              <div className="quiz-options">
-                                {q.options?.map((opt, oi) => {
-                                  let cls = "quiz-option";
-                                  if (rec.lastResult) {
-                                    if (normalize(opt) === normalize(q.correctAnswer)) cls += " quiz-option-correct";
-                                    else if (normalize(opt) === normalize(answerDraft)) cls += " quiz-option-wrong";
-                                  }
-                                  return (
-                                    <button
-                                      key={oi}
-                                      className={cls}
-                                      disabled={!!rec.lastResult}
-                                      onClick={() => {
-                                        setAnswerDraft(opt);
-                                        submitAnswer(opt);
-                                      }}
-                                    >
-                                      {opt}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            {(q.type === "translate_to_target" || q.type === "translate_to_english") && (
-                              <div className="quiz-type-answer">
-                                <input
-                                  className="companion-input"
-                                  type="text"
-                                  value={answerDraft}
-                                  disabled={!!rec.lastResult}
-                                  placeholder="Type your answer..."
-                                  onChange={(e) => setAnswerDraft(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" && !rec.lastResult) submitAnswer(answerDraft);
-                                  }}
-                                />
-                                {!rec.lastResult && (
-                                  <button className="secondary-button" onClick={() => submitAnswer(answerDraft)}>
-                                    Check
-                                  </button>
-                                )}
-                              </div>
-                            )}
-
-                            {q.type === "listening" && (
-                              <div className="quiz-type-answer">
-                                <button
-                                  className="vocab-play-button"
-                                  onClick={() => speakWord(q.speakText || q.correctAnswer)}
-                                >
-                                  🔊 Play Audio
-                                </button>
-                                <input
-                                  className="companion-input"
-                                  type="text"
-                                  value={answerDraft}
-                                  disabled={!!rec.lastResult}
-                                  placeholder="Type what you hear..."
-                                  onChange={(e) => setAnswerDraft(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" && !rec.lastResult) submitAnswer(answerDraft);
-                                  }}
-                                />
-                                {!rec.lastResult && (
-                                  <button className="secondary-button" onClick={() => submitAnswer(answerDraft)}>
-                                    Check
-                                  </button>
-                                )}
-                              </div>
-                            )}
-
-                            {q.type === "word_bank" && (
-                              <div className="quiz-type-answer">
-                                <div className="word-bank-built">
-                                  {selectedWordBank.length === 0 && (
-                                    <span className="word-bank-placeholder">Tap words below...</span>
-                                  )}
-                                  {selectedWordBank.map((piece, pi) => (
-                                    <button
-                                      key={pi}
-                                      className="word-bank-chip word-bank-chip-selected"
-                                      disabled={!!rec.lastResult}
-                                      onClick={() =>
-                                        setSelectedWordBank((prev) => prev.filter((_, idx) => idx !== pi))
-                                      }
-                                    >
-                                      {piece}
-                                    </button>
-                                  ))}
-                                </div>
-                                <div className="word-bank-pool">
-                                  {q.wordBank
-                                    ?.filter((piece) => !selectedWordBank.includes(piece))
-                                    .map((piece, pi) => (
-                                      <button
-                                        key={pi}
-                                        className="word-bank-chip"
-                                        disabled={!!rec.lastResult}
-                                        onClick={() => toggleWordBankPiece(piece)}
-                                      >
-                                        {piece}
-                                      </button>
-                                    ))}
-                                </div>
-                                {!rec.lastResult && (
-                                  <button
-                                    className="secondary-button"
-                                    onClick={() => submitAnswer(selectedWordBank.join(" "))}
-                                    disabled={selectedWordBank.length === 0}
-                                  >
-                                    Check
-                                  </button>
-                                )}
-                              </div>
-                            )}
-
-                            {rec.lastResult && (
-                              <div className={`quiz-feedback quiz-feedback-${rec.lastResult}`}>
-                                <p className="quiz-feedback-title">
-                                  {rec.lastResult === "correct" ? "✅ Correct!" : "❌ Not quite"}
-                                </p>
-                                {rec.lastResult === "wrong" && (
-                                  <p className="quiz-feedback-answer">Correct answer: {q.correctAnswer}</p>
-                                )}
-                                <p className="quiz-explanation">💡 {q.explanation}</p>
-                                <button className="primary-button" onClick={nextQuestion}>
-                                  Continue
-                                </button>
-                              </div>
-                            )}
                           </div>
-                        )}
-
-                        {isActive && rec.quiz && rec.quizFinished && (
-                          <div className="quiz-box">
-                            {rec.lives <= 0 ? (
-                              <>
-                                <p className="quiz-result-title quiz-result-fail">💔 Out of Lives</p>
-                                <p className="quiz-score">
-                                  {rec.correctCount} / {rec.quiz.length} correct
-                                </p>
-                                <p className="roadmap-intro">
-                                  Review the vocabulary above and try again when you're ready.
-                                </p>
-                                <button className="secondary-button" onClick={startQuiz}>
-                                  🔄 Retry Test
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <p className={`quiz-result-title ${passed ? "quiz-result-pass" : "quiz-result-fail"}`}>
-                                  {passed ? "🏆 Test Passed!" : "📉 Below Passing Score"}
-                                </p>
-                                <p className="quiz-score">
-                                  {rec.correctCount} / {rec.quiz.length} correct (
-                                  {Math.round((rec.correctCount / rec.quiz.length) * 100)}%) — need 80% to pass
-                                </p>
-                                {!passed && (
-                                  <button className="secondary-button" onClick={startQuiz}>
-                                    🔄 Retry Test
-                                  </button>
-                                )}
-                                {passed &&
-                                  (finished ? (
-                                    <p className="finished-text">
-                                      🎉 You've completed every lesson in this language roadmap!
-                                    </p>
-                                  ) : (
-                                    <button className="done-button" onClick={nextLesson} disabled={lessonLoading}>
-                                      {lessonLoading ? "Loading next lesson..." : "➡️ Continue to Next Lesson"}
-                                    </button>
-                                  ))}
-                              </>
-                            )}
-                          </div>
-                        )}
-
-                        {i < lessonRecords.length - 1 && <hr className="step-divider" />}
+                        ))}
                       </div>
-                    );
-                  })}
+                    )}
+
+                    <textarea
+                      value={question}
+                      placeholder="Ask about this plan..."
+                      onChange={(e) => setQuestion(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          askQuestion();
+                        }
+                      }}
+                    />
+                    <button
+                      className="secondary-button"
+                      onClick={askQuestion}
+                      disabled={asking}
+                    >
+                      {asking ? "Thinking..." : "Ask NEXUS AI"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </>

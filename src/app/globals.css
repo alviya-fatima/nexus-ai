@@ -1253,3 +1253,70 @@ transform:scale(1.1);
     margin-top:8px;
     border:1px solid rgba(0,255,153,0.3);
 }
+.idea-picker-box{
+    margin-top:14px;
+}
+.idea-picker-box{
+    margin-top:14px;
+}
+
+.idea-card{
+    background:rgba(0,255,153,0.05);
+    border:1px solid rgba(0,255,153,0.3);
+    border-radius:12px;
+    padding:12px;
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    text-align:left;
+    cursor:pointer;
+    color:inherit;
+}
+
+.idea-card:hover{
+    background:rgba(0,255,153,0.12);
+    border-color:#00ff99;
+}
+
+.idea-card-pick{
+    color:#00ff99;
+    font-size:11px;
+    margin-top:4px;
+}
+
+.image-source-note{
+    display:block;
+    color:#888;
+    font-size:10.5px;
+    margin-top:4px;
+}
+.idea-card{
+    background:rgba(0,255,153,0.05);
+    border:1px solid rgba(0,255,153,0.3);
+    border-radius:12px;
+    padding:12px;
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    text-align:left;
+    cursor:pointer;
+    color:inherit;
+}
+
+.idea-card:hover{
+    background:rgba(0,255,153,0.12);
+    border-color:#00ff99;
+}
+
+.idea-card-pick{
+    color:#00ff99;
+    font-size:11px;
+    margin-top:4px;
+}
+
+.image-source-note{
+    display:block;
+    color:#888;
+    font-size:10.5px;
+    margin-top:4px;
+}

@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { saveMemory, getUserProfileFacts } from "@/lib/supermemory";
+import { saveMemory, getUserProfileFacts } from "../../../lib/supermemory";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY!,
@@ -10,6 +10,27 @@ function cleanJson(text: string) {
     .replace(/```json/g, "")
     .replace(/```/g, "")
     .trim();
+}
+
+// Completely free, keyless fallback image source (community-run,
+// no signup, no billing). Used only if Gemini's image model fails
+// or the free-tier rate limit is hit.
+async function generateWithPollinations(prompt: string): Promise<string | null> {
+  try {
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(
+      prompt
+    )}?width=768&height=768&nologo=true`;
+
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    const arrayBuffer = await res.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    return `data:image/png;base64,${base64}`;
+  } catch (err) {
+    console.error("Pollinations fallback failed:", err);
+    return null;
+  }
 }
 
 export async function POST(req: Request) {
@@ -142,37 +163,108 @@ Question: ${question}
 
     // ---------------------------------------------------------
     // MODE 3: Generate an actual design image from a prompt
+    // Tries Gemini's free-tier image model first, then falls back
+    // to a completely free, keyless image source if that fails
     // ---------------------------------------------------------
     if (mode === "generate_image") {
       const { prompt } = body as { prompt: string };
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-image",
-        contents: prompt,
-        config: {
-          responseModalities: ["TEXT", "IMAGE"],
-        },
-      });
-
-      const parts = response.candidates?.[0]?.content?.parts ?? [];
       let imageDataUrl: string | null = null;
+      let source: "gemini" | "pollinations" = "gemini";
 
-      for (const part of parts) {
-        if (part.inlineData?.data) {
-          const mimeType = part.inlineData.mimeType || "image/png";
-          imageDataUrl = `data:${mimeType};base64,${part.inlineData.data}`;
-          break;
+      try {
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-image",
+          contents: prompt,
+          config: {
+            responseModalities: ["TEXT", "IMAGE"],
+          },
+        });
+
+        const parts = response.candidates?.[0]?.content?.parts ?? [];
+
+        for (const part of parts) {
+          if (part.inlineData?.data) {
+            const mimeType = part.inlineData.mimeType || "image/png";
+            imageDataUrl = `data:${mimeType};base64,${part.inlineData.data}`;
+            break;
+          }
         }
+      } catch (err) {
+        console.error("Gemini image generation failed, falling back:", err);
+      }
+
+      if (!imageDataUrl) {
+        imageDataUrl = await generateWithPollinations(prompt);
+        source = "pollinations";
       }
 
       if (!imageDataUrl) {
         return Response.json(
-          { error: "Couldn't generate an image for that concept." },
+          { error: "Couldn't generate an image for that concept — both image sources failed." },
           { status: 422 }
         );
       }
 
-      return Response.json({ imageDataUrl });
+      return Response.json({ imageDataUrl, source });
+    }
+
+    // ---------------------------------------------------------
+    // MODE 4: Suggest project/presentation ideas for a theme
+    // ---------------------------------------------------------
+    if (mode === "suggest_ideas") {
+      const { theme, userId } = body as { theme: string; userId?: string };
+
+      let memoryContext = "";
+      if (userId) {
+        const facts = await getUserProfileFacts(userId, theme);
+        if (facts.length > 0) {
+          memoryContext = `\n\nWhat you remember about this person from past sessions:\n${facts
+            .map((f) => `- ${f}`)
+            .join("\n")}`;
+        }
+      }
+
+      const prompt = `
+You are NEXUS AI, an expert project & presentation idea generator.
+
+The person wants project/presentation ideas within this theme: "${theme}"
+${memoryContext}
+
+You MUST reply ONLY with valid JSON. No markdown. No \`\`\`json. No explanations.
+
+Return ONLY this structure:
+
+{
+  "ideas": [
+    { "title": "string", "description": "string" }
+  ]
+}
+
+Rules:
+- Generate exactly 6 genuinely distinct, creative project/presentation ideas that fit the theme.
+- Vary the type of idea (some hands-on/build projects, some presentation/research-style, some experiment-based) so there's real variety to choose from.
+- title: a short, catchy name for the idea (max ~8 words).
+- description: 1-2 sentences explaining what it involves and why it's a good pick — specific enough that picking it gives real direction, not generic.
+- Never return anything except the JSON object.
+`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+      });
+
+      const parsed = JSON.parse(cleanJson(response.text ?? ""));
+
+      if (userId) {
+        void saveMemory(
+          userId,
+          `User browsed project ideas for the theme "${theme}".`,
+          { type: "project_studio_ideas", theme }
+        );
+      }
+
+      return Response.json(parsed);
     }
 
     return Response.json({ error: "Unknown mode." }, { status: 400 });
