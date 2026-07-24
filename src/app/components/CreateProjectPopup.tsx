@@ -54,18 +54,24 @@ export default function CreateProjectPopup({
           />
         </button>
 
-        {/* Button 2 */}
+        {/* Button 2 - Project, Presentation & Research Studio */}
 
-        <button className="popup-btn btn2">
+        <button
+          className="popup-btn btn2"
+          onClick={() => {
+            onClose();
+            router.push("/dashboard/project-studio");
+          }}
+        >
           <Image
             src="/btn2.png"
-            alt="Button 2"
+            alt="Project, Presentation & Research Studio"
             width={260}
             height={60}
             priority
           />
         </button>
-
+        
         {/* Button 3 - AI Companion & Mock Interview */}
 
         <button
