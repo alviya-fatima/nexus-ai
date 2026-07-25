@@ -1,25 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Image from "next/image";
 import dashboard from "../../assets/dashboard.png";
 
 import { auth } from "../firebase/config";
-import {
-  signOut,
-  onAuthStateChanged,
-  User,
-} from "firebase/auth";
-
+import { signOut, onAuthStateChanged, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
 import CreateProjectPopup from "../components/CreateProjectPopup";
+import { useEffect, useState } from "react";
+import { getUserProfile } from "../../lib/userProfile";
+import OnboardingQuiz from "../../components/OnboardingQuiz";
 
 export default function Dashboard() {
   const router = useRouter();
 
   const [user, setUser] = useState<User | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
+
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -33,6 +33,14 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [router]);
 
+  useEffect(() => {
+    if (!user) return;
+    getUserProfile(user.uid).then((profile) => {
+      setNeedsOnboarding(!profile || !profile.onboarded);
+      setCheckingOnboarding(false);
+    });
+  }, [user]);
+
   const logout = async () => {
     try {
       await signOut(auth);
@@ -41,6 +49,15 @@ export default function Dashboard() {
       console.error(error);
     }
   };
+
+  if (user && !checkingOnboarding && needsOnboarding) {
+    return (
+      <OnboardingQuiz
+        userId={user.uid}
+        onComplete={() => setNeedsOnboarding(false)}
+      />
+    );
+  }
 
   return (
     <main className="dashboard-page">
