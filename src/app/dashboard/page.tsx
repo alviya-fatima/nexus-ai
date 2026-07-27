@@ -1,45 +1,59 @@
 "use client";
 
+import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import dashboard from "../../assets/dashboard.png";
 
 import { auth } from "../firebase/config";
-import { signOut, onAuthStateChanged, User } from "firebase/auth";
+import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
 import CreateProjectPopup from "../components/CreateProjectPopup";
-import { useEffect, useState } from "react";
-import { getUserProfile } from "../../lib/userProfile";
-import OnboardingQuiz from "../../components/OnboardingQuiz";
+import ChatCard from "../components/ChatCard";
+import { supabase } from "../../lib/supabaseClient";
+
+type ChatHistoryRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  feature: string;
+  session_id: string;
+  created_at: string;
+};
 
 export default function Dashboard() {
   const router = useRouter();
 
   const [user, setUser] = useState<User | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
+  const [chats, setChats] = useState<ChatHistoryRow[]>([]);
 
-  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const fetchChats = useCallback(async (uid: string) => {
+    const { data, error } = await supabase
+      .from("chat_history")
+      .select("*")
+      .eq("user_id", uid)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+    setChats(data ?? []);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
+        fetchChats(currentUser.uid);
       } else {
         router.push("/");
       }
     });
 
     return () => unsubscribe();
-  }, [router]);
-
-  useEffect(() => {
-    if (!user) return;
-    getUserProfile(user.uid).then((profile) => {
-      setNeedsOnboarding(!profile || !profile.onboarded);
-      setCheckingOnboarding(false);
-    });
-  }, [user]);
+  }, [router, fetchChats]);
 
   const logout = async () => {
     try {
@@ -50,18 +64,10 @@ export default function Dashboard() {
     }
   };
 
-  if (user && !checkingOnboarding && needsOnboarding) {
-    return (
-      <OnboardingQuiz
-        userId={user.uid}
-        onComplete={() => setNeedsOnboarding(false)}
-      />
-    );
-  }
+  const latestChat = chats[0];
 
   return (
     <main className="dashboard-page">
-
       <Image
         src={dashboard}
         alt="Dashboard"
@@ -71,7 +77,18 @@ export default function Dashboard() {
         className="dashboard-image"
       />
 
-      {/* Hide dashboard buttons while popup is open */}
+      {/* Latest chat, centered */}
+      {latestChat && !popupOpen && (
+        <div className="dashboard-center-chat">
+          <ChatCard
+            id={latestChat.id}
+            title={latestChat.title}
+            description={latestChat.description}
+            feature={latestChat.feature}
+            sessionId={latestChat.session_id}
+          />
+        </div>
+      )}
 
       {!popupOpen && (
         <>
@@ -116,6 +133,7 @@ export default function Dashboard() {
       <CreateProjectPopup
         isOpen={popupOpen}
         onClose={() => setPopupOpen(false)}
+        onCreated={() => user && fetchChats(user.uid)}
       />
 
       {user?.photoURL && (
@@ -131,10 +149,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <button
-        onClick={logout}
-        className="logout-button"
-      >
+      <button onClick={logout} className="logout-button">
         <Image
           src="/google-logout-btn.png"
           alt="Logout"
@@ -144,7 +159,6 @@ export default function Dashboard() {
           className="logout-button-image"
         />
       </button>
-
     </main>
   );
 }

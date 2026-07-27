@@ -1451,3 +1451,56 @@ transform:scale(1.1);
     background:rgba(0,255,153,0.15);
     border-color:#00ff99;
 }
+.dashboard-center-chat {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+}
+
+.chat-card {
+  background: rgba(20, 20, 20, 0.85);
+  border-radius: 12px;
+  padding: 20px 28px;
+  min-width: 260px;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.15s ease;
+}
+
+.chat-card:hover {
+  transform: scale(1.03);
+}
+
+.chat-card-title {
+  color: #fff;
+  font-size: 1.1rem;
+  margin: 0 0 6px;
+}
+
+.chat-card-description {
+  color: #aaa;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.popup-input {
+  position: relative;
+  z-index: 2;
+  display: block;
+  margin: 10px auto;
+  padding: 10px 14px;
+  width: 80%;
+  border-radius: 8px;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  color: #fff;
+}
+
+.popup-error {
+  color: #ff6b6b;
+  text-align: center;
+  font-size: 0.85rem;
+  margin: 4px 0;
+}
