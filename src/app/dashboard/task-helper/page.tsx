@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { onAuthStateChanged, User, getAuth } from "firebase/auth";
-const auth = getAuth();
+import { onAuthStateChanged, User } from "firebase/auth";
+import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
+import { upsertChat } from "../../../lib/chats";
 
 type Lesson = {
   title: string;
@@ -38,11 +39,9 @@ export default function TaskHelperPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
 
-  // Task input
   const [taskInput, setTaskInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Plan + step history
   const [goal, setGoal] = useState("");
   const [steps, setSteps] = useState<string[]>([]);
   const [stepRecords, setStepRecords] = useState<StepRecord[]>([]);
@@ -50,7 +49,6 @@ export default function TaskHelperPage() {
   const [finished, setFinished] = useState(false);
   const [usedMemory, setUsedMemory] = useState(false);
 
-  // Question composer
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -75,7 +73,6 @@ export default function TaskHelperPage() {
     return () => unsubscribe();
   }, [router]);
 
-  // Persist the session to Supabase every time it changes
   useEffect(() => {
     if (!started || !user) return;
 
@@ -93,12 +90,21 @@ export default function TaskHelperPage() {
           },
           { onConflict: "id" }
         );
+
+        await upsertChat({
+          id: sessionIdRef.current,
+          userId: user.uid,
+          feature: "task-helper",
+          title: goal || originalTaskRef.current || "New chat",
+          route: "/dashboard/task-helper",
+        });
       } catch (error) {
         console.error("Supabase save failed:", error);
       }
     };
 
     saveSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goal, steps, stepRecords, started, user]);
 
   async function generateTask() {
@@ -331,9 +337,7 @@ export default function TaskHelperPage() {
           {!started && (
             <div className="skill-screen">
               <h1>What do you need help with?</h1>
-              <p className="skill-subtitle">
-                Ask NEXUS AI anything.
-              </p>
+              <p className="skill-subtitle">Ask NEXUS AI anything.</p>
 
               <textarea
                 value={taskInput}
@@ -359,7 +363,6 @@ export default function TaskHelperPage() {
 
           {started && (
             <>
-              {/* BOX 1: The plan — its own standalone card */}
               <div className="roadmap-card">
                 <h1>🎯 {goal}</h1>
                 <h2>🗺️ Your Full Plan</h2>
@@ -397,7 +400,6 @@ export default function TaskHelperPage() {
                 </button>
               </div>
 
-              {/* BOX 2+: Each step gets its own lesson box + its own ask box */}
               <div className="lesson-feed-card">
                 <div className="steps-feed">
                   {stepRecords.map((step, i) => {
@@ -449,7 +451,7 @@ export default function TaskHelperPage() {
                                                 key={att.id}
                                                 src={att.dataUrl}
                                                 alt={att.name}
-                                                className="chat-area-v2.png"
+                                                className="gpt-attachment-image"
                                               />
                                             ) : (
                                               <a
@@ -465,9 +467,11 @@ export default function TaskHelperPage() {
                                           )}
                                         </div>
                                       )}
-                                    <p>{entry.question}</p>
+                                    {entry.question && <p>{entry.question}</p>}
                                   </div>
-                                  <div className="gpt-msg gpt-msg-ai">
+
+                                  <div className="gpt-msg gpt-msg-assistant">
+                                    <span className="gpt-avatar">🤖</span>
                                     <p>{entry.answer}</p>
                                   </div>
                                 </div>

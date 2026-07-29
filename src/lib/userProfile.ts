@@ -36,7 +36,6 @@ export async function saveUserProfile(profile: Partial<UserProfile> & { user_id:
   }
 }
 
-/** Marks the person as having seen onboarding, without necessarily filling in details (used by Skip). */
 export async function markOnboardingSeen(userId: string) {
   await saveUserProfile({
     user_id: userId,
@@ -60,10 +59,6 @@ const toneInstructions: Record<UserProfile["tone"], string> = {
     "Talk like a supportive, motivating coach — encouraging, direct, focused on helping the person take action and improve.",
 };
 
-/**
- * Builds a short instruction block to prepend to any AI prompt so every
- * feature in the app talks to this specific person the same personalized way.
- */
 export function buildPersonalizationPrompt(profile: UserProfile | null): string {
   if (!profile || !profile.onboarded) return "";
 

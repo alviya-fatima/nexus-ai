@@ -1,9 +1,5 @@
 import Supermemory from "supermemory";
 
-// Server-only helper — never import this file from a "use client" component.
-// It uses SUPERMEMORY_API_KEY (no NEXT_PUBLIC_ prefix) so the key stays
-// on the server and is never sent to the browser.
-
 let client: Supermemory | null = null;
 
 function getClient(): Supermemory {
@@ -13,10 +9,6 @@ function getClient(): Supermemory {
   return client;
 }
 
-/**
- * Store a memory scoped to a specific user (containerTag).
- * Fire-and-forget: failures are logged but never break the main request.
- */
 export async function saveMemory(
   containerTag: string,
   content: string,
@@ -24,22 +16,12 @@ export async function saveMemory(
 ): Promise<void> {
   try {
     const sm = getClient();
-    await sm.add({
-      content,
-      containerTag,
-      metadata,
-    });
+    await sm.add({ content, containerTag, metadata });
   } catch (err) {
     console.error("Supermemory saveMemory failed:", err);
   }
 }
 
-/**
- * Retrieve what Supermemory knows about a user, optionally scoped
- * to a query, so the AI can personalize its response.
- * Returns an empty array on any failure so callers can treat it
- * as "no extra context available" rather than crashing.
- */
 export async function getUserProfileFacts(
   containerTag: string,
   query?: string
@@ -53,5 +35,32 @@ export async function getUserProfileFacts(
   } catch (err) {
     console.error("Supermemory getUserProfileFacts failed:", err);
     return [];
+  }
+}
+
+export async function saveQuizToMemory(
+  userId: string,
+  profile: {
+    display_name: string;
+    age?: string;
+    interests?: string;
+    favorite_color?: string;
+    tone: string;
+    use_emojis: boolean;
+  }
+) {
+  const facts = [
+    `This person's name is ${profile.display_name}, always refer to them by this name.`,
+    `They want NEXUS AI to talk to them in a "${profile.tone}" tone.`,
+    profile.use_emojis
+      ? "They like emojis in responses."
+      : "They do NOT want emojis in responses.",
+    profile.age ? `Their age: ${profile.age}.` : "",
+    profile.interests ? `Their interests: ${profile.interests}.` : "",
+    profile.favorite_color ? `Their favorite color: ${profile.favorite_color}.` : "",
+  ].filter(Boolean);
+
+  for (const fact of facts) {
+    await saveMemory(userId, fact, { type: "onboarding_quiz" });
   }
 }

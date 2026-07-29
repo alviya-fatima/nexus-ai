@@ -6,6 +6,7 @@ import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
+import { upsertChat } from "../../../lib/chats";
 
 type VocabWord = {
   word: string;

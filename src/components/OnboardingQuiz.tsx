@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { saveUserProfile, markOnboardingSeen, UserProfile } from "../lib/userProfile";
+import { saveQuizToMemory } from "../lib/supermemory";
 
 type Props = {
   userId: string;
@@ -21,7 +22,7 @@ export default function OnboardingQuiz({ userId, onComplete }: Props) {
     if (!displayName.trim() || saving) return;
     setSaving(true);
 
-    await saveUserProfile({
+    const profileData = {
       user_id: userId,
       display_name: displayName.trim(),
       age: age.trim(),
@@ -30,7 +31,10 @@ export default function OnboardingQuiz({ userId, onComplete }: Props) {
       tone,
       use_emojis: useEmojis,
       onboarded: true,
-    });
+    };
+
+    await saveUserProfile(profileData);
+    await saveQuizToMemory(userId, profileData);
 
     setSaving(false);
     onComplete();

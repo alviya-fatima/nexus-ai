@@ -7,6 +7,7 @@ import { jsPDF } from "jspdf";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
+import { upsertChat } from "../../../lib/chats";
 
 type BudgetItem = {
   item: string;
@@ -91,6 +92,14 @@ export default function ProjectStudioPage() {
           },
           { onConflict: "id" }
         );
+
+        await upsertChat({
+          id: sessionIdRef.current,
+          userId: user.uid,
+          feature: "project-studio",
+          title: plan.title || brief || "New chat",
+          route: "/dashboard/project-studio",
+        });
       } catch (error) {
         console.error("Supabase save failed:", error);
       }
@@ -457,4 +466,16 @@ export default function ProjectStudioPage() {
       </div>
     </main>
   );
+}
+import { upsertChat } from "../../../lib/chats";
+
+// ...inside the same save effect, after the session upsert succeeds:
+if (user) {
+  upsertChat({
+    id: sessionIdRef.current,
+    userId: user.uid,
+    feature: "career", // change to "task-helper" / "companion" / "language" / "project-studio" per page
+    title: goal || skill || "New chat", // use whatever holds the first topic/goal on that page
+    route: "/dashboard/career", // change to that page's own route
+  });
 }

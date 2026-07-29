@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { auth } from "../../firebase/config";
+import { supabase } from "../../../lib/supabaseClient";
+import { upsertChat } from "../../../lib/chats";
 
 type Lesson = {
   title: string;
@@ -31,6 +36,9 @@ function makeId() {
 }
 
 export default function CareerPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+
   // Skill input
   const [skill, setSkill] = useState("");
   const [loading, setLoading] = useState(false);
@@ -51,15 +59,62 @@ export default function CareerPage() {
 
   const feedRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sessionIdRef = useRef<string>(makeId());
 
   const started = roadmap.length > 0;
   const activeStepIndex = steps.length - 1;
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        router.push("/");
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
 
   useEffect(() => {
     if (feedRef.current) {
       feedRef.current.scrollTop = feedRef.current.scrollHeight;
     }
   }, [steps.length]);
+
+  // Persist the session to Supabase + update the chat history list
+  useEffect(() => {
+    if (!started || !user) return;
+
+    const saveSession = async () => {
+      try {
+        await supabase.from("task_sessions").upsert(
+          {
+            id: sessionIdRef.current,
+            user_id: user.uid,
+            task: skill,
+            goal,
+            roadmap,
+            session_data: steps,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" }
+        );
+
+        await upsertChat({
+          id: sessionIdRef.current,
+          userId: user.uid,
+          feature: "career",
+          title: goal || skill || "New chat",
+          route: "/dashboard/career",
+        });
+      } catch (error) {
+        console.error("Supabase save failed:", error);
+      }
+    };
+
+    saveSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goal, roadmap, steps, started, user]);
 
   async function generateRoadmap() {
     if (!skill.trim() || loading) return;
@@ -260,7 +315,6 @@ export default function CareerPage() {
 
           {started && (
             <>
-              {/* BOX 1: Roadmap — its own separate card, bigger text */}
               <div className="roadmap-card">
                 <h1>🎯 {goal}</h1>
                 <h2>🗺️ Your Roadmap to Conquer</h2>
@@ -287,7 +341,6 @@ export default function CareerPage() {
                 </div>
               </div>
 
-              {/* BOX 2+: Scrollable feed — each step gets its own lesson box + its own ask box */}
               <div className="lesson-feed-card">
                 <div className="steps-feed" ref={feedRef}>
                   {steps.map((step, i) => {
@@ -295,7 +348,6 @@ export default function CareerPage() {
 
                     return (
                       <div key={step.index} className="step-block">
-                        {/* Separate box: the lesson content itself */}
                         <div className="step-lesson-box">
                           <h2>
                             📚 Step {step.index + 1}: {step.lesson.title}
@@ -321,7 +373,6 @@ export default function CareerPage() {
                           </div>
                         </div>
 
-                        {/* Separate box: ask about this step + its chat thread */}
                         <div className="step-ask-box">
                           <h3 className="ask-heading">
                             💬 Ask anything about Step {step.index + 1}

@@ -829,3 +829,15 @@ export default function CompanionPage() {
     </main>
   );
 }
+import { upsertChat } from "../../../lib/chats";
+
+// ...inside the same save effect, after the session upsert succeeds:
+if (user) {
+  upsertChat({
+    id: sessionIdRef.current,
+    userId: user.uid,
+    feature: "career", // change to "task-helper" / "companion" / "language" / "project-studio" per page
+    title: goal || skill || "New chat", // use whatever holds the first topic/goal on that page
+    route: "/dashboard/career", // change to that page's own route
+  });
+}

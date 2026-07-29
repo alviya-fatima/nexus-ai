@@ -1,59 +1,51 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
-import dashboard from "../../assets/dashboard.png";
-
-import { auth } from "../firebase/config";
-import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
-
+import dashboard from "../../assets/dashboard.png";
+import { auth } from "../firebase/config";
+import { signOut, onAuthStateChanged, User } from "firebase/auth";
 import CreateProjectPopup from "../components/CreateProjectPopup";
-import ChatCard from "../components/ChatCard";
-import { supabase } from "../../lib/supabaseClient";
-
-type ChatHistoryRow = {
-  id: string;
-  title: string;
-  description: string | null;
-  feature: string;
-  session_id: string;
-  created_at: string;
-};
+import OnboardingQuiz from "../../components/OnboardingQuiz";
+import { getUserProfile } from "../../lib/userProfile";
+import { fetchChats, ChatEntry } from "../../lib/chats";
 
 export default function Dashboard() {
   const router = useRouter();
 
   const [user, setUser] = useState<User | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
-  const [chats, setChats] = useState<ChatHistoryRow[]>([]);
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  const fetchChats = useCallback(async (uid: string) => {
-    const { data, error } = await supabase
-      .from("chat_history")
-      .select("*")
-      .eq("user_id", uid)
-      .order("created_at", { ascending: false });
+  const [chats, setChats] = useState<ChatEntry[]>([]);
+  const [chatsLoading, setChatsLoading] = useState(true);
 
-    if (error) {
-      console.error(error);
-      return;
-    }
-    setChats(data ?? []);
+  const fetchUserChats = useCallback(async (userId: string) => {
+    setChatsLoading(true);
+    const data = await fetchChats(userId);
+    setChats(data);
+    setChatsLoading(false);
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        fetchChats(currentUser.uid);
+
+        const profile = await getUserProfile(currentUser.uid);
+        setShowOnboarding(!profile || !profile.onboarded);
+        setCheckingOnboarding(false);
+
+        fetchUserChats(currentUser.uid);
       } else {
         router.push("/");
       }
     });
 
     return () => unsubscribe();
-  }, [router, fetchChats]);
+  }, [router, fetchUserChats]);
 
   const logout = async () => {
     try {
@@ -64,7 +56,9 @@ export default function Dashboard() {
     }
   };
 
-  const latestChat = chats[0];
+  function openChat(chat: ChatEntry) {
+    router.push(chat.route);
+  }
 
   return (
     <main className="dashboard-page">
@@ -77,20 +71,7 @@ export default function Dashboard() {
         className="dashboard-image"
       />
 
-      {/* Latest chat, centered */}
-      {latestChat && !popupOpen && (
-        <div className="dashboard-center-chat">
-          <ChatCard
-            id={latestChat.id}
-            title={latestChat.title}
-            description={latestChat.description}
-            feature={latestChat.feature}
-            sessionId={latestChat.session_id}
-          />
-        </div>
-      )}
-
-      {!popupOpen && (
+      {!popupOpen && !checkingOnboarding && !showOnboarding && (
         <>
           <button className="search-button">
             <Image
@@ -124,41 +105,53 @@ export default function Dashboard() {
               width={260}
               height={75}
               priority
-              className="create-project-image"
             />
+          </button>
+
+          {/* Chat history — appears in the middle of the dashboard */}
+          <div className="dashboard-chats-panel">
+            <h2>💬 Your Chats</h2>
+
+            {chatsLoading && <p className="loading-text">Loading your chats...</p>}
+
+            {!chatsLoading && chats.length === 0 && (
+              <p className="roadmap-intro">
+                No chats yet — create a project above to start your first one.
+              </p>
+            )}
+
+            {!chatsLoading && chats.length > 0 && (
+              <div className="dashboard-chats-list">
+                {chats.map((chat) => (
+                  <button
+                    key={chat.id}
+                    className="history-card"
+                    onClick={() => openChat(chat)}
+                  >
+                    <span>{chat.title}</span>
+                    <span className="history-card-date">
+                      {new Date(chat.updated_at).toLocaleDateString()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button className="logout-button" onClick={logout}>
+            Sign Out
           </button>
         </>
       )}
 
-      <CreateProjectPopup
-        isOpen={popupOpen}
-        onClose={() => setPopupOpen(false)}
-        onCreated={() => user && fetchChats(user.uid)}
-      />
+      <CreateProjectPopup isOpen={popupOpen} onClose={() => setPopupOpen(false)} />
 
-      {user?.photoURL && (
-        <div className="profile-container">
-          <Image
-            src={user.photoURL}
-            alt="Profile"
-            width={140}
-            height={140}
-            unoptimized
-            className="profile-picture"
-          />
-        </div>
-      )}
-
-      <button onClick={logout} className="logout-button">
-        <Image
-          src="/google-logout-btn.png"
-          alt="Logout"
-          width={220}
-          height={60}
-          priority
-          className="logout-button-image"
+      {user && !checkingOnboarding && showOnboarding && (
+        <OnboardingQuiz
+          userId={user.uid}
+          onComplete={() => setShowOnboarding(false)}
         />
-      </button>
+      )}
     </main>
   );
 }

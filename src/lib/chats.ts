@@ -1,0 +1,58 @@
+import { supabase } from "./supabaseClient";
+
+export type ChatEntry = {
+  id: string;
+  user_id: string;
+  feature: string;
+  title: string;
+  route: string;
+  updated_at: string;
+};
+
+export async function upsertChat(params: {
+  id: string;
+  userId: string;
+  feature: string;
+  title: string;
+  route: string;
+}) {
+  try {
+    const { error } = await supabase.from("chats").upsert(
+      {
+        id: params.id,
+        user_id: params.userId,
+        feature: params.feature,
+        title: params.title,
+        route: params.route,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" }
+    );
+
+    if (error) {
+      console.error("upsertChat failed:", error.message, error.details, error.hint);
+    }
+  } catch (err) {
+    console.error("upsertChat failed:", err);
+  }
+}
+
+export async function fetchChats(userId: string): Promise<ChatEntry[]> {
+  try {
+    const { data, error } = await supabase
+      .from("chats")
+      .select("*")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      console.error("fetchChats failed:", error.message, error.details, error.hint);
+      return [];
+    }
+
+    return (data as ChatEntry[]) ?? [];
+  } catch (err) {
+    console.error("fetchChats failed:", err);
+    return [];
+  }
+}
