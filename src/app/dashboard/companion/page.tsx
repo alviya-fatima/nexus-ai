@@ -6,6 +6,7 @@ import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
+import { upsertChat } from "../../../lib/chats";
 
 type Message = { role: "user" | "assistant"; text: string };
 
@@ -121,17 +122,31 @@ export default function CompanionPage() {
 
     const saveSession = async () => {
       try {
+        const isInterview = phase === "interviewing" || phase === "report";
+
         await supabase.from("voice_sessions").upsert(
           {
             id: sessionIdRef.current,
             user_id: user.uid,
-            mode: phase === "interviewing" || phase === "report" ? "interview" : "chat",
-            transcript: phase === "interviewing" || phase === "report" ? transcript : messages,
+            mode: isInterview ? "interview" : "chat",
+            transcript: isInterview ? transcript : messages,
             report,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" }
         );
+
+        const chatTitle = isInterview
+          ? `Mock Interview: ${role || "Untitled"}`
+          : messages[0]?.text?.slice(0, 60) || "Voice Chat";
+
+        await upsertChat({
+          id: sessionIdRef.current,
+          userId: user.uid,
+          feature: "companion",
+          title: chatTitle,
+          route: "/dashboard/companion",
+        });
       } catch (error) {
         console.error("Supabase save failed:", error);
       }
@@ -828,16 +843,4 @@ export default function CompanionPage() {
       </div>
     </main>
   );
-}
-import { upsertChat } from "../../../lib/chats";
-
-// ...inside the same save effect, after the session upsert succeeds:
-if (user) {
-  upsertChat({
-    id: sessionIdRef.current,
-    userId: user.uid,
-    feature: "career", // change to "task-helper" / "companion" / "language" / "project-studio" per page
-    title: goal || skill || "New chat", // use whatever holds the first topic/goal on that page
-    route: "/dashboard/career", // change to that page's own route
-  });
 }
