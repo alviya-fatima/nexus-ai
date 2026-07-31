@@ -6,11 +6,6 @@ import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import {
-  getGrowthData,
-  GrowthPoint,
-  GROWTH_FEATURES,
-} from "../../../lib/growth";
-import {
   LineChart,
   Line,
   XAxis,
@@ -19,7 +14,11 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-
+import {
+  getGrowthData,
+  GrowthPoint,
+  GROWTH_FEATURES,
+} from "../../../lib/growth";
 export default function GrowthPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);

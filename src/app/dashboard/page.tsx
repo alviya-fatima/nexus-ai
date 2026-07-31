@@ -83,19 +83,20 @@ export default function Dashboard() {
               className="search-bar-image"
             />
           </button>
-<button
-  className="per-growth-button"
-  onClick={() => router.push("/dashboard/growth")}
->
-  <Image
-    src="/per-grow.png"
-    alt="Per Growth"
-    width={250}
-    height={70}
-    priority
-    className="per-growth-image"
-  />
-</button>
+
+          <button
+            className="per-growth-button"
+            onClick={() => router.push("/dashboard/growth")}
+          >
+            <Image
+              src="/per-grow.png"
+              alt="Per Growth"
+              width={250}
+              height={70}
+              priority
+              className="per-growth-image"
+            />
+          </button>
 
           <button
             className="create-project-button"
