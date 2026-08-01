@@ -6,7 +6,7 @@ import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
-import { upsertChat } from "../../../lib/chats";
+import { upsertChat, generateChatMeta } from "../../../lib/chats";
 
 type Lesson = {
   title: string;
@@ -39,23 +39,23 @@ export default function CareerPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
 
-  // Skill input
   const [skill, setSkill] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Roadmap + step history
   const [goal, setGoal] = useState("");
   const [roadmap, setRoadmap] = useState<string[]>([]);
   const [steps, setSteps] = useState<StepRecord[]>([]);
   const [lessonLoading, setLessonLoading] = useState(false);
   const [finished, setFinished] = useState(false);
 
-  // Question composer (always applies to the latest/active step)
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [linkInputOpen, setLinkInputOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
+
+  const [chatTitle, setChatTitle] = useState("");
+  const [chatDescription, setChatDescription] = useState("");
 
   const feedRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +81,6 @@ export default function CareerPage() {
     }
   }, [steps.length]);
 
-  // Persist the session to Supabase + update the chat history list
   useEffect(() => {
     if (!started || !user) return;
 
@@ -104,7 +103,8 @@ export default function CareerPage() {
           id: sessionIdRef.current,
           userId: user.uid,
           feature: "career",
-          title: goal || skill || "New chat",
+          title: chatTitle || goal || skill || "New chat",
+          description: chatDescription,
           route: "/dashboard/career",
         });
       } catch (error) {
@@ -114,7 +114,7 @@ export default function CareerPage() {
 
     saveSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goal, roadmap, steps, started, user]);
+  }, [goal, roadmap, steps, started, user, chatTitle, chatDescription]);
 
   async function generateRoadmap() {
     if (!skill.trim() || loading) return;
@@ -133,6 +133,11 @@ export default function CareerPage() {
       setRoadmap(data.roadmap);
       setSteps([{ index: 0, lesson: data.lesson, chat: [] }]);
       setFinished(false);
+
+      generateChatMeta(skill).then(({ title, description }) => {
+        setChatTitle(title);
+        setChatDescription(description);
+      });
     } catch (error) {
       console.error(error);
     }
@@ -274,6 +279,13 @@ export default function CareerPage() {
 
   return (
     <main className="career-page">
+      <button
+        className="back-to-dashboard-button"
+        onClick={() => router.push("/dashboard")}
+      >
+        ← Back to Dashboard
+      </button>
+
       <Image
         src="/chat-area-v2.png"
         alt="Career Background"

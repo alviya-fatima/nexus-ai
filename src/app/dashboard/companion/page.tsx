@@ -6,7 +6,7 @@ import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
-import { upsertChat } from "../../../lib/chats";
+import { upsertChat, generateChatMeta } from "../../../lib/chats";
 
 type Message = { role: "user" | "assistant"; text: string };
 
@@ -55,13 +55,11 @@ export default function CompanionPage() {
 
   const [phase, setPhase] = useState<Phase>("chat");
 
-  // General voice-only chat
   const [messages, setMessages] = useState<Message[]>([]);
   const [voiceChatActive, setVoiceChatActive] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
   const voiceChatActiveRef = useRef(false);
 
-  // Interview setup — resume is a PDF upload, not a text box
   const [resumeText, setResumeText] = useState("");
   const [resumeFileName, setResumeFileName] = useState("");
   const [resumeUploading, setResumeUploading] = useState(false);
@@ -70,7 +68,6 @@ export default function CompanionPage() {
   const [experienceLevel, setExperienceLevel] = useState("Entry-level");
   const [startingInterview, setStartingInterview] = useState(false);
 
-  // Interview in progress — fully voice-driven, no text/manual submit
   const [questions, setQuestions] = useState<string[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [transcript, setTranscript] = useState<QAPair[]>([]);
@@ -80,16 +77,16 @@ export default function CompanionPage() {
   const questionsRef = useRef<string[]>([]);
   const currentQuestionIndexRef = useRef(0);
 
-  // Report
   const [report, setReport] = useState<InterviewReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
 
-  // Listening (native SpeechRecognition OR universal mic-recording fallback)
+  const [chatTitle, setChatTitle] = useState("");
+  const [chatDescription, setChatDescription] = useState("");
+
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const silenceRafRef = useRef<number | null>(null);
 
-  // Speaking (Gemini TTS played through a plain <audio> element)
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const sessionIdRef = useRef<string>(makeId());
@@ -115,7 +112,6 @@ export default function CompanionPage() {
     setVoiceSupported(hasNative || hasFallback);
   }, []);
 
-  // Persist session to Supabase whenever anything meaningful changes
   useEffect(() => {
     if (!user) return;
     if (messages.length === 0 && transcript.length === 0 && !report) return;
@@ -136,15 +132,20 @@ export default function CompanionPage() {
           { onConflict: "id" }
         );
 
-        const chatTitle = isInterview
+        const title = isInterview
           ? `Mock Interview: ${role || "Untitled"}`
-          : messages[0]?.text?.slice(0, 60) || "Voice Chat";
+          : chatTitle || messages[0]?.text?.slice(0, 60) || "Voice Chat";
+
+        const description = isInterview
+          ? `Mock interview practice for ${role || "a role"}`
+          : chatDescription;
 
         await upsertChat({
           id: sessionIdRef.current,
           userId: user.uid,
           feature: "companion",
-          title: chatTitle,
+          title,
+          description,
           route: "/dashboard/companion",
         });
       } catch (error) {
@@ -154,9 +155,7 @@ export default function CompanionPage() {
 
     saveSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, transcript, report, user]);
-
-  // ---------------- Speaking: always via Gemini TTS + <audio> (universal) ----------------
+  }, [messages, transcript, report, user, chatTitle, chatDescription, phase, role]);
 
   async function speak(text: string, onEnd?: () => void) {
     try {
@@ -188,8 +187,6 @@ export default function CompanionPage() {
     audioRef.current?.pause();
     audioRef.current = null;
   }
-
-  // ---------------- Listening: native SpeechRecognition, else universal mic + Gemini ----------------
 
   async function transcribeBlob(blob: Blob): Promise<string> {
     const dataUrl = await blobToDataUrl(blob);
@@ -318,7 +315,6 @@ export default function CompanionPage() {
       return;
     }
 
-    // Universal fallback: record until silence, then transcribe via Gemini
     recordWithSilenceDetection(onFinalTranscript);
   }
 
@@ -331,8 +327,6 @@ export default function CompanionPage() {
       mediaRecorderRef.current.stop();
     }
   }
-
-  // ---------------- General voice-only chat (continuous loop) ----------------
 
   function startVoiceChat() {
     voiceChatActiveRef.current = true;
@@ -361,6 +355,13 @@ export default function CompanionPage() {
     const newMessages: Message[] = [...messages, { role: "user", text }];
     setMessages(newMessages);
     setVoiceStatus("thinking");
+
+    if (newMessages.length === 1) {
+      generateChatMeta(text).then(({ title, description }) => {
+        setChatTitle(title);
+        setChatDescription(description);
+      });
+    }
 
     try {
       const res = await fetch("/api/companion", {
@@ -398,8 +399,6 @@ export default function CompanionPage() {
       }
     }
   }
-
-  // ---------------- Resume upload (PDF only) ----------------
 
   async function handleResumeFileSelected(fileList: FileList | null) {
     const file = fileList?.[0];
@@ -446,8 +445,6 @@ export default function CompanionPage() {
     setResumeFileName("");
     setResumeError("");
   }
-
-  // ---------------- Mock interview flow (fully voice-driven) ----------------
 
   async function beginInterview() {
     if (!role.trim() || !resumeText.trim() || startingInterview) return;
@@ -584,6 +581,8 @@ export default function CompanionPage() {
     setTranscript([]);
     setInterviewVoiceStatus("idle");
     setReport(null);
+    setChatTitle("");
+    setChatDescription("");
   }
 
   const voiceStatusLabel: Record<VoiceStatus, string> = {
@@ -602,6 +601,13 @@ export default function CompanionPage() {
 
   return (
     <main className="career-page">
+      <button
+        className="back-to-dashboard-button"
+        onClick={() => router.push("/dashboard")}
+      >
+        ← Back to Dashboard
+      </button>
+
       <Image
         src="/chat-area-v2.png"
         alt="Companion Background"
@@ -622,7 +628,6 @@ export default function CompanionPage() {
             </div>
           )}
 
-          {/* ---------------- CHAT PHASE (voice only) ---------------- */}
           {phase === "chat" && (
             <div className="roadmap-card">
               <h1>🎙️ Talk to NEXUS AI</h1>
@@ -662,7 +667,6 @@ export default function CompanionPage() {
             </div>
           )}
 
-          {/* ---------------- INTERVIEW SETUP PHASE ---------------- */}
           {phase === "interview-setup" && (
             <div className="roadmap-card">
               <h1>🎯 Set Up Your Mock Interview</h1>
@@ -746,7 +750,6 @@ export default function CompanionPage() {
             </div>
           )}
 
-          {/* ---------------- INTERVIEWING PHASE (voice only) ---------------- */}
           {phase === "interviewing" && (
             <div className="roadmap-card">
               <h1>🎯 Mock Interview: {role}</h1>
@@ -773,7 +776,6 @@ export default function CompanionPage() {
             </div>
           )}
 
-          {/* ---------------- REPORT PHASE ---------------- */}
           {phase === "report" && (
             <div className="roadmap-card">
               <h1>📊 Interview Report: {role}</h1>

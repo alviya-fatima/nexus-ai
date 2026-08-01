@@ -6,7 +6,7 @@ import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
-import { upsertChat } from "../../../lib/chats";
+import { upsertChat, generateChatMeta } from "../../../lib/chats";
 
 type VocabWord = {
   word: string;
@@ -61,6 +61,9 @@ export default function LanguagePage() {
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
 
+  const [chatTitle, setChatTitle] = useState("");
+  const [chatDescription, setChatDescription] = useState("");
+
   const sessionIdRef = useRef<string>(makeId());
   const originalLanguageRef = useRef<string>("");
 
@@ -79,7 +82,6 @@ export default function LanguagePage() {
     return () => unsubscribe();
   }, [router]);
 
-  // Persist to Supabase whenever the session changes
   useEffect(() => {
     if (!started || !user) return;
 
@@ -97,6 +99,15 @@ export default function LanguagePage() {
           },
           { onConflict: "id" }
         );
+
+        await upsertChat({
+          id: sessionIdRef.current,
+          userId: user.uid,
+          feature: "language",
+          title: chatTitle || goal || originalLanguageRef.current || "New chat",
+          description: chatDescription,
+          route: "/dashboard/language",
+        });
       } catch (error) {
         console.error("Supabase save failed:", error);
       }
@@ -104,7 +115,7 @@ export default function LanguagePage() {
 
     saveSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goal, roadmap, lessonRecords, started, user]);
+  }, [goal, roadmap, lessonRecords, started, user, chatTitle, chatDescription]);
 
   function speakWord(text: string) {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
@@ -148,6 +159,11 @@ export default function LanguagePage() {
         },
       ]);
       setFinished(false);
+
+      generateChatMeta(languageInput).then(({ title, description }) => {
+        setChatTitle(title);
+        setChatDescription(description);
+      });
     } catch (error) {
       console.error(error);
     }
@@ -309,6 +325,13 @@ export default function LanguagePage() {
 
   return (
     <main className="career-page">
+      <button
+        className="back-to-dashboard-button"
+        onClick={() => router.push("/dashboard")}
+      >
+        ← Back to Dashboard
+      </button>
+
       <Image
         src="/chat-area-v2.png"
         alt="Language Learning Background"

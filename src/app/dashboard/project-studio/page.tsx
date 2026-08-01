@@ -7,7 +7,7 @@ import { jsPDF } from "jspdf";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
-import { upsertChat } from "../../../lib/chats";
+import { upsertChat, generateChatMeta } from "../../../lib/chats";
 
 type BudgetItem = {
   item: string;
@@ -60,6 +60,9 @@ export default function ProjectStudioPage() {
   const [designImages, setDesignImages] = useState<DesignImageState[]>([]);
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
+  const [chatTitle, setChatTitle] = useState("");
+  const [chatDescription, setChatDescription] = useState("");
+
   const sessionIdRef = useRef<string>(makeId());
 
   const started = !!plan;
@@ -97,7 +100,8 @@ export default function ProjectStudioPage() {
           id: sessionIdRef.current,
           userId: user.uid,
           feature: "project-studio",
-          title: plan.title || brief || "New chat",
+          title: chatTitle || plan.title || brief || "New chat",
+          description: chatDescription,
           route: "/dashboard/project-studio",
         });
       } catch (error) {
@@ -107,7 +111,7 @@ export default function ProjectStudioPage() {
 
     saveSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, chat, user]);
+  }, [plan, chat, user, chatTitle, chatDescription]);
 
   async function generatePlan() {
     if (!brief.trim() || !requirements.trim() || loading) return;
@@ -131,6 +135,11 @@ export default function ProjectStudioPage() {
         data.designIdeas.map(() => ({ loading: false, dataUrl: null, error: null }))
       );
       setChat([]);
+
+      generateChatMeta(brief).then(({ title, description }) => {
+        setChatTitle(title);
+        setChatDescription(description);
+      });
     } catch (error) {
       console.error(error);
     }
@@ -280,6 +289,13 @@ export default function ProjectStudioPage() {
 
   return (
     <main className="career-page">
+      <button
+        className="back-to-dashboard-button"
+        onClick={() => router.push("/dashboard")}
+      >
+        ← Back to Dashboard
+      </button>
+
       <Image
         src="/chat-area-v2.png"
         alt="Project Studio Background"

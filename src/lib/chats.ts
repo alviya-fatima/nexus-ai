@@ -5,6 +5,7 @@ export type ChatEntry = {
   user_id: string;
   feature: string;
   title: string;
+  description: string;
   route: string;
   updated_at: string;
 };
@@ -14,6 +15,7 @@ export async function upsertChat(params: {
   userId: string;
   feature: string;
   title: string;
+  description?: string;
   route: string;
 }) {
   try {
@@ -23,6 +25,7 @@ export async function upsertChat(params: {
         user_id: params.userId,
         feature: params.feature,
         title: params.title,
+        description: params.description ?? "",
         route: params.route,
         updated_at: new Date().toISOString(),
       },
@@ -54,5 +57,21 @@ export async function fetchChats(userId: string): Promise<ChatEntry[]> {
   } catch (err) {
     console.error("fetchChats failed:", err);
     return [];
+  }
+}
+
+export async function generateChatMeta(
+  firstPrompt: string
+): Promise<{ title: string; description: string }> {
+  try {
+    const res = await fetch("/api/generate-chat-meta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ firstPrompt }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.error("generateChatMeta failed:", err);
+    return { title: "New Chat", description: "" };
   }
 }
