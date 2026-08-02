@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
-import { upsertChat, generateChatMeta } from "../../../lib/chats";
+import { upsertChat, generateChatMeta, loadSessionRow } from "../../../lib/chats";
 
 type Message = { role: "user" | "assistant"; text: string };
 
@@ -50,6 +50,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
 export default function CompanionPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [voiceSupported, setVoiceSupported] = useState(true);
 
@@ -91,6 +92,7 @@ export default function CompanionPage() {
 
   const sessionIdRef = useRef<string>(makeId());
   const resumeInputRef = useRef<HTMLInputElement>(null);
+  const loadedSessionRef = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -112,6 +114,30 @@ export default function CompanionPage() {
     setVoiceSupported(hasNative || hasFallback);
   }, []);
 
+  // Reopen a saved chat if ?session=<id> is in the URL
+  useEffect(() => {
+    if (!user || loadedSessionRef.current) return;
+    const sessionId = searchParams.get("session");
+    if (!sessionId) return;
+
+    loadedSessionRef.current = true;
+
+    loadSessionRow("voice_sessions", sessionId).then((row) => {
+      if (!row) return;
+      sessionIdRef.current = row.id;
+
+      if (row.mode === "interview") {
+        setTranscript(row.transcript || []);
+        setReport(row.report || null);
+        setRole(row.report?.role || "");
+        setPhase("report");
+      } else {
+        setMessages(row.transcript || []);
+        setPhase("chat");
+      }
+    });
+  }, [user, searchParams]);
+
   useEffect(() => {
     if (!user) return;
     if (messages.length === 0 && transcript.length === 0 && !report) return;
@@ -126,7 +152,7 @@ export default function CompanionPage() {
             user_id: user.uid,
             mode: isInterview ? "interview" : "chat",
             transcript: isInterview ? transcript : messages,
-            report,
+            report: report ? { ...report, role } : report,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" }

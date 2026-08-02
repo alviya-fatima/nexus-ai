@@ -1,69 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Image from "next/image";
-import { onAuthStateChanged, User } from "firebase/auth";
+import dashboard from "../../assets/dashboard.png";
+
 import { auth } from "../../firebase/config";
-import { supabase } from "../../../lib/supabaseClient";
-import { upsertChat, generateChatMeta } from "../../../lib/chats";
+import { signOut, onAuthStateChanged, User } from "firebase/auth";
 
-type Lesson = {
-  title: string;
-  whatYouLearn: string;
-  whyImportant: string;
-  whatToDo: string[];
-};
+import { useRouter } from "next/navigation";
 
-type Attachment =
-  | { id: string; kind: "image"; dataUrl: string; name: string }
-  | { id: string; kind: "link"; url: string };
+import CreateProjectPopup from "../../components/CreateProjectPopup";
+import { ChatSession, getChats, isChatFromToday } from "../../../lib/chatStorage";
+import { ChatEntry } from "@/lib/chats";
 
-type ChatEntry = {
-  question: string;
-  answer: string;
-  attachments?: Attachment[];
-};
-
-type StepRecord = {
-  index: number;
-  lesson: Lesson;
-  chat: ChatEntry[];
-};
-
-function makeId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-export default function CareerPage() {
+export default function Dashboard() {
   const router = useRouter();
+
   const [user, setUser] = useState<User | null>(null);
-
-  const [skill, setSkill] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const [goal, setGoal] = useState("");
-  const [roadmap, setRoadmap] = useState<string[]>([]);
-  const [steps, setSteps] = useState<StepRecord[]>([]);
-  const [lessonLoading, setLessonLoading] = useState(false);
-  const [finished, setFinished] = useState(false);
-
-  const [question, setQuestion] = useState("");
-  const [asking, setAsking] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [linkInputOpen, setLinkInputOpen] = useState(false);
-  const [linkDraft, setLinkDraft] = useState("");
-
-  const [chatTitle, setChatTitle] = useState("");
-  const [chatDescription, setChatDescription] = useState("");
-
-  const feedRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const sessionIdRef = useRef<string>(makeId());
-
-  const started = roadmap.length > 0;
-  const activeStepIndex = steps.length - 1;
-
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [todayChats, setTodayChats] = useState<ChatSession[]>([]);
+function openChat(chat: ChatEntry) {
+  router.push(`${chat.route}?session=${chat.id}`);
+}
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
@@ -72,500 +30,114 @@ export default function CareerPage() {
         router.push("/");
       }
     });
+
     return () => unsubscribe();
   }, [router]);
 
   useEffect(() => {
-    if (feedRef.current) {
-      feedRef.current.scrollTop = feedRef.current.scrollHeight;
-    }
-  }, [steps.length]);
+    if (!user) return;
+    setTodayChats(getChats(user.uid).filter(isChatFromToday));
+  }, [user, popupOpen]);
 
-  useEffect(() => {
-    if (!started || !user) return;
-
-    const saveSession = async () => {
-      try {
-        await supabase.from("task_sessions").upsert(
-          {
-            id: sessionIdRef.current,
-            user_id: user.uid,
-            task: skill,
-            goal,
-            roadmap,
-            session_data: steps,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" }
-        );
-
-        await upsertChat({
-          id: sessionIdRef.current,
-          userId: user.uid,
-          feature: "career",
-          title: chatTitle || goal || skill || "New chat",
-          description: chatDescription,
-          route: "/dashboard/career",
-        });
-      } catch (error) {
-        console.error("Supabase save failed:", error);
-      }
-    };
-
-    saveSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goal, roadmap, steps, started, user, chatTitle, chatDescription]);
-
-  async function generateRoadmap() {
-    if (!skill.trim() || loading) return;
-    setLoading(true);
-
+  const logout = async () => {
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "roadmap", message: skill }),
-      });
-
-      const data = await res.json();
-
-      setGoal(data.goal);
-      setRoadmap(data.roadmap);
-      setSteps([{ index: 0, lesson: data.lesson, chat: [] }]);
-      setFinished(false);
-
-      generateChatMeta(skill).then(({ title, description }) => {
-        setChatTitle(title);
-        setChatDescription(description);
-      });
+      await signOut(auth);
+      router.push("/");
     } catch (error) {
       console.error(error);
     }
-
-    setLoading(false);
-  }
-
-  function handleFilesSelected(fileList: FileList | null) {
-    if (!fileList) return;
-
-    Array.from(fileList).forEach((file) => {
-      if (!file.type.startsWith("image/")) return;
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        setAttachments((prev) => [
-          ...prev,
-          { id: makeId(), kind: "image", dataUrl, name: file.name },
-        ]);
-      };
-      reader.readAsDataURL(file);
-    });
-
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-
-  function addLinkAttachment() {
-    const trimmed = linkDraft.trim();
-    if (!trimmed) return;
-
-    setAttachments((prev) => [
-      ...prev,
-      { id: makeId(), kind: "link", url: trimmed },
-    ]);
-    setLinkDraft("");
-    setLinkInputOpen(false);
-  }
-
-  function removeAttachment(id: string) {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
-  }
-
-  async function askQuestion() {
-    if ((!question.trim() && attachments.length === 0) || asking || activeStepIndex < 0)
-      return;
-
-    const activeLesson = steps[activeStepIndex].lesson;
-    const askedQuestion = question;
-    const askedAttachments = attachments;
-
-    const imagePayload = askedAttachments
-      .filter((a): a is Extract<Attachment, { kind: "image" }> => a.kind === "image")
-      .map((a) => a.dataUrl);
-
-    const linkPayload = askedAttachments
-      .filter((a): a is Extract<Attachment, { kind: "link" }> => a.kind === "link")
-      .map((a) => a.url);
-
-    setQuestion("");
-    setAttachments([]);
-    setAsking(true);
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "question",
-          lessonTitle: activeLesson.title,
-          question: askedQuestion || "(see attached image/link)",
-          images: imagePayload,
-          links: linkPayload,
-        }),
-      });
-
-      const data = await res.json();
-
-      setSteps((prev) =>
-        prev.map((step, i) =>
-          i === activeStepIndex
-            ? {
-                ...step,
-                chat: [
-                  ...step.chat,
-                  {
-                    question: askedQuestion,
-                    answer: data.reply ?? "",
-                    attachments: askedAttachments,
-                  },
-                ],
-              }
-            : step
-        )
-      );
-    } catch (error) {
-      console.error(error);
-    }
-
-    setAsking(false);
-  }
-
-  async function markDone() {
-    if (lessonLoading || activeStepIndex < 0) return;
-
-    const nextIndex = activeStepIndex + 1;
-
-    if (nextIndex >= roadmap.length) {
-      setFinished(true);
-      return;
-    }
-
-    setLessonLoading(true);
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "lesson",
-          goal,
-          roadmap,
-          stepIndex: nextIndex,
-        }),
-      });
-
-      const data = await res.json();
-
-      setSteps((prev) => [
-        ...prev,
-        { index: nextIndex, lesson: data.lesson, chat: [] },
-      ]);
-    } catch (error) {
-      console.error(error);
-    }
-
-    setLessonLoading(false);
-  }
+  };
 
   return (
-    <main className="career-page">
-      <button
-        className="back-to-dashboard-button"
-        onClick={() => router.push("/dashboard")}
-      >
-        ← Back to Dashboard
-      </button>
-
+    <main className="dashboard-page">
       <Image
-        src="/chat-area-v2.png"
-        alt="Career Background"
+        src={dashboard}
+        alt="Dashboard"
         fill
         priority
-        className="career-background"
+        quality={100}
+        className="dashboard-image"
       />
 
-      <div className="career-overlay">
-        <div className="career-container">
-          {!started && (
-            <div className="skill-screen">
-              <h1>What do you want to learn?</h1>
-              <p className="skill-subtitle">
-                Tell NEXUS AI any skill and it will build you a step-by-step roadmap.
-              </p>
+      {!popupOpen && (
+        <>
+        
 
-              <textarea
-                value={skill}
-                placeholder="Example: Java, Cybersecurity, UI Design..."
-                onChange={(e) => setSkill(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    generateRoadmap();
-                  }
-                }}
-              />
+          <button className="per-growth-button">
+            <Image
+              src="/per-grow.png"
+              alt="Per Growth"
+              width={250}
+              height={70}
+              priority
+              className="per-growth-image"
+            />
+          </button>
 
+          {/* navigate to growth on click */}
+          <style jsx>{``}</style>
+            
+          
+
+          <button
+            className="create-project-button"
+            onClick={() => setPopupOpen(true)}
+          >
+            <Image
+              src="/create-btn.png"
+              alt="Create Project"
+              width={260}
+              height={75}
+              priority
+              className="create-project-image"
+            />
+          </button>
+        </>
+      )}
+
+      <CreateProjectPopup isOpen={popupOpen} onClose={() => setPopupOpen(false)} />
+
+      {!popupOpen && todayChats.length > 0 && (
+        <div className="today-chats-panel">
+          <h3 className="today-chats-heading">Today</h3>
+
+          <div className="today-chats-list">
+            {todayChats.map((chat) => (
               <button
-                className="primary-button"
-                onClick={generateRoadmap}
-                disabled={loading}
+                key={chat.id}
+                className="today-chat-item"
+                onClick={() => openChat(chat as unknown as ChatEntry)}
               >
-                {loading ? "Generating..." : "🚀 Generate Roadmap"}
+                {chat.title}
               </button>
-            </div>
-          )}
-
-          {started && (
-            <>
-              <div className="roadmap-card">
-                <h1>🎯 {goal}</h1>
-                <h2>🗺️ Your Roadmap to Conquer</h2>
-                <p className="roadmap-intro">
-                  Here's everything you'll work through, step by step, to get there 👇
-                </p>
-
-                <div className="roadmap-list">
-                  {roadmap.map((step, index) => (
-                    <div
-                      key={index}
-                      className={`roadmap-step ${
-                        index === activeStepIndex ? "roadmap-step-active" : ""
-                      }`}
-                    >
-                      {index < activeStepIndex
-                        ? "✅"
-                        : index === activeStepIndex
-                        ? "▶️"
-                        : "⬜"}{" "}
-                      {step}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="lesson-feed-card">
-                <div className="steps-feed" ref={feedRef}>
-                  {steps.map((step, i) => {
-                    const isActive = i === activeStepIndex;
-
-                    return (
-                      <div key={step.index} className="step-block">
-                        <div className="step-lesson-box">
-                          <h2>
-                            📚 Step {step.index + 1}: {step.lesson.title}
-                          </h2>
-
-                          <div className="lesson-bubble bubble-learn">
-                            <h3>📖 What You'll Learn</h3>
-                            <p>{step.lesson.whatYouLearn}</p>
-                          </div>
-
-                          <div className="lesson-bubble bubble-why">
-                            <h3>💡 Why It's Important</h3>
-                            <p>{step.lesson.whyImportant}</p>
-                          </div>
-
-                          <div className="lesson-bubble bubble-todo">
-                            <h3>📝 What To Do</h3>
-                            <ul>
-                              {step.lesson.whatToDo.map((task, index) => (
-                                <li key={index}>{task}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-
-                        <div className="step-ask-box">
-                          <h3 className="ask-heading">
-                            💬 Ask anything about Step {step.index + 1}
-                          </h3>
-
-                          {step.chat.length > 0 && (
-                            <div className="gpt-thread">
-                              {step.chat.map((entry, index) => (
-                                <div key={index} className="gpt-exchange">
-                                  <div className="gpt-msg gpt-msg-user">
-                                    {entry.attachments &&
-                                      entry.attachments.length > 0 && (
-                                        <div className="gpt-attachments">
-                                          {entry.attachments.map((att) =>
-                                            att.kind === "image" ? (
-                                              <img
-                                                key={att.id}
-                                                src={att.dataUrl}
-                                                alt={att.name}
-                                                className="gpt-attachment-image"
-                                              />
-                                            ) : (
-                                              <a
-                                                key={att.id}
-                                                href={att.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="gpt-attachment-link"
-                                              >
-                                                🔗 {att.url}
-                                              </a>
-                                            )
-                                          )}
-                                        </div>
-                                      )}
-                                    {entry.question && <p>{entry.question}</p>}
-                                  </div>
-
-                                  <div className="gpt-msg gpt-msg-assistant">
-                                    <span className="gpt-avatar">🤖</span>
-                                    <p>{entry.answer}</p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {isActive && (
-                            <>
-                              {attachments.length > 0 && (
-                                <div className="composer-attachments">
-                                  {attachments.map((att) => (
-                                    <div key={att.id} className="composer-chip">
-                                      {att.kind === "image" ? (
-                                        <img
-                                          src={att.dataUrl}
-                                          alt={att.name}
-                                          className="composer-chip-image"
-                                        />
-                                      ) : (
-                                        <span className="composer-chip-link">
-                                          🔗 {att.url}
-                                        </span>
-                                      )}
-                                      <button
-                                        className="composer-chip-remove"
-                                        onClick={() => removeAttachment(att.id)}
-                                        aria-label="Remove attachment"
-                                      >
-                                        ✕
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {linkInputOpen && (
-                                <div className="link-input-row">
-                                  <input
-                                    type="text"
-                                    value={linkDraft}
-                                    placeholder="Paste a link..."
-                                    onChange={(e) =>
-                                      setLinkDraft(e.target.value)
-                                    }
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        addLinkAttachment();
-                                      }
-                                    }}
-                                  />
-                                  <button onClick={addLinkAttachment}>
-                                    Add
-                                  </button>
-                                </div>
-                              )}
-
-                              <textarea
-                                value={question}
-                                placeholder={`Ask about Step ${
-                                  step.index + 1
-                                }...`}
-                                onChange={(e) => setQuestion(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" && !e.shiftKey) {
-                                    e.preventDefault();
-                                    askQuestion();
-                                  }
-                                }}
-                              />
-
-                              <div className="composer-toolbar">
-                                <input
-                                  ref={fileInputRef}
-                                  type="file"
-                                  accept="image/*"
-                                  multiple
-                                  hidden
-                                  onChange={(e) =>
-                                    handleFilesSelected(e.target.files)
-                                  }
-                                />
-                                <button
-                                  type="button"
-                                  className="icon-button"
-                                  onClick={() => fileInputRef.current?.click()}
-                                  title="Upload image"
-                                >
-                                  📷 Image
-                                </button>
-                                <button
-                                  type="button"
-                                  className="icon-button"
-                                  onClick={() => setLinkInputOpen((v) => !v)}
-                                  title="Add link"
-                                >
-                                  🔗 Link
-                                </button>
-
-                                <button
-                                  className="secondary-button"
-                                  onClick={askQuestion}
-                                  disabled={asking}
-                                >
-                                  {asking ? "Thinking..." : "Ask NEXUS AI"}
-                                </button>
-                              </div>
-
-                              {finished ? (
-                                <p className="finished-text">
-                                  🎉 You've completed every step in this
-                                  roadmap!
-                                </p>
-                              ) : (
-                                <button
-                                  className="done-button"
-                                  onClick={markDone}
-                                  disabled={lessonLoading}
-                                >
-                                  {lessonLoading
-                                    ? "Loading next step..."
-                                    : "✅ Done — Next Step"}
-                                </button>
-                              )}
-                            </>
-                          )}
-                        </div>
-
-                        {i < steps.length - 1 && (
-                          <hr className="step-divider" />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </>
-          )}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {user?.photoURL && (
+        <div className="profile-container">
+          <Image
+            src={user.photoURL}
+            alt="Profile"
+            width={140}
+            height={5}
+            unoptimized
+            className="profile-picture"
+          />
+        </div>
+      )}
+
+      <button onClick={logout} className="logout-button">
+        <Image
+          src="/google-logout-btn.png"
+          alt="Logout"
+          width={220}
+          height={60}
+          priority
+          className="logout-button-image"
+        />
+      </button>
     </main>
   );
 }

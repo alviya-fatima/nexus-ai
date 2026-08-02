@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { jsPDF } from "jspdf";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
-import { upsertChat, generateChatMeta } from "../../../lib/chats";
+import { upsertChat, generateChatMeta, loadSessionRow } from "../../../lib/chats";
 
 type BudgetItem = {
   item: string;
@@ -46,6 +46,7 @@ function makeId() {
 
 export default function ProjectStudioPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
 
   const [brief, setBrief] = useState("");
@@ -64,6 +65,7 @@ export default function ProjectStudioPage() {
   const [chatDescription, setChatDescription] = useState("");
 
   const sessionIdRef = useRef<string>(makeId());
+  const loadedSessionRef = useRef(false);
 
   const started = !!plan;
 
@@ -77,6 +79,31 @@ export default function ProjectStudioPage() {
     });
     return () => unsubscribe();
   }, [router]);
+
+  // Reopen a saved chat if ?session=<id> is in the URL
+  useEffect(() => {
+    if (!user || loadedSessionRef.current) return;
+    const sessionId = searchParams.get("session");
+    if (!sessionId) return;
+
+    loadedSessionRef.current = true;
+
+    loadSessionRow("task_sessions", sessionId).then((row) => {
+      if (!row) return;
+      sessionIdRef.current = row.id;
+      setBrief(row.task || "");
+      setPlan(row.session_data?.plan || null);
+      setChat(row.session_data?.chat || []);
+      const designCount = row.session_data?.plan?.designIdeas?.length || 0;
+      setDesignImages(
+        new Array(designCount).fill(null).map(() => ({
+          loading: false,
+          dataUrl: null,
+          error: null,
+        }))
+      );
+    });
+  }, [user, searchParams]);
 
   useEffect(() => {
     if (!plan || !user) return;

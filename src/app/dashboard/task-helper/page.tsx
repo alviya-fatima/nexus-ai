@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
-import { upsertChat } from "../../../lib/chats";
+import { upsertChat, generateChatMeta, loadSessionRow } from "../../../lib/chats";
 
 type Lesson = {
   title: string;
@@ -37,6 +37,7 @@ function makeId() {
 
 export default function TaskHelperPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
 
   const [taskInput, setTaskInput] = useState("");
@@ -55,9 +56,13 @@ export default function TaskHelperPage() {
   const [linkInputOpen, setLinkInputOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
 
+  const [chatTitle, setChatTitle] = useState("");
+  const [chatDescription, setChatDescription] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionIdRef = useRef<string>(makeId());
   const originalTaskRef = useRef<string>("");
+  const loadedSessionRef = useRef(false);
 
   const started = steps.length > 0;
   const activeStepIndex = stepRecords.length - 1;
@@ -72,6 +77,24 @@ export default function TaskHelperPage() {
     });
     return () => unsubscribe();
   }, [router]);
+
+  // Reopen a saved chat if ?session=<id> is in the URL
+  useEffect(() => {
+    if (!user || loadedSessionRef.current) return;
+    const sessionId = searchParams.get("session");
+    if (!sessionId) return;
+
+    loadedSessionRef.current = true;
+
+    loadSessionRow("task_sessions", sessionId).then((row) => {
+      if (!row) return;
+      sessionIdRef.current = row.id;
+      originalTaskRef.current = row.task || "";
+      setGoal(row.goal || "");
+      setSteps(row.roadmap || []);
+      setStepRecords(row.session_data || []);
+    });
+  }, [user, searchParams]);
 
   useEffect(() => {
     if (!started || !user) return;
@@ -95,7 +118,8 @@ export default function TaskHelperPage() {
           id: sessionIdRef.current,
           userId: user.uid,
           feature: "task-helper",
-          title: goal || originalTaskRef.current || "New chat",
+          title: chatTitle || goal || originalTaskRef.current || "New chat",
+          description: chatDescription,
           route: "/dashboard/task-helper",
         });
       } catch (error) {
@@ -105,7 +129,7 @@ export default function TaskHelperPage() {
 
     saveSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goal, steps, stepRecords, started, user]);
+  }, [goal, steps, stepRecords, started, user, chatTitle, chatDescription]);
 
   async function generateTask() {
     if (!taskInput.trim() || loading) return;
@@ -130,6 +154,11 @@ export default function TaskHelperPage() {
       setStepRecords([{ index: 0, lesson: data.lesson, chat: [] }]);
       setFinished(false);
       setUsedMemory(!!data.usedMemory);
+
+      generateChatMeta(taskInput).then(({ title, description }) => {
+        setChatTitle(title);
+        setChatDescription(description);
+      });
     } catch (error) {
       console.error(error);
     }
@@ -324,6 +353,13 @@ export default function TaskHelperPage() {
 
   return (
     <main className="career-page">
+      <button
+        className="back-to-dashboard-button"
+        onClick={() => router.push("/dashboard")}
+      >
+        ← Back to Dashboard
+      </button>
+
       <Image
         src="/chat-area-v2.png"
         alt="Task Helper Background"

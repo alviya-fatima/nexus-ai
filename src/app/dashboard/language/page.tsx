@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
-import { upsertChat, generateChatMeta } from "../../../lib/chats";
+import { upsertChat, generateChatMeta, loadSessionRow } from "../../../lib/chats";
 
 type VocabWord = {
   word: string;
@@ -46,6 +46,7 @@ function makeId() {
 
 export default function LanguagePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
 
   const [languageInput, setLanguageInput] = useState("");
@@ -66,6 +67,7 @@ export default function LanguagePage() {
 
   const sessionIdRef = useRef<string>(makeId());
   const originalLanguageRef = useRef<string>("");
+  const loadedSessionRef = useRef(false);
 
   const started = roadmap.length > 0;
   const activeIndex = lessonRecords.length - 1;
@@ -82,6 +84,26 @@ export default function LanguagePage() {
     return () => unsubscribe();
   }, [router]);
 
+  // Reopen a saved chat if ?session=<id> is in the URL
+  useEffect(() => {
+    if (!user || loadedSessionRef.current) return;
+    const sessionId = searchParams.get("session");
+    if (!sessionId) return;
+
+    loadedSessionRef.current = true;
+
+    loadSessionRow("task_sessions", sessionId).then((row) => {
+      if (!row) return;
+      sessionIdRef.current = row.id;
+      const task: string = row.task || "";
+      originalLanguageRef.current = task.replace(/^Language:\s*/, "");
+      setGoal(row.goal || "");
+      setRoadmap(row.roadmap || []);
+      setLangCode(row.session_data?.langCode || "en-US");
+      setLessonRecords(row.session_data?.lessonRecords || []);
+    });
+  }, [user, searchParams]);
+
   useEffect(() => {
     if (!started || !user) return;
 
@@ -94,7 +116,7 @@ export default function LanguagePage() {
             task: `Language: ${originalLanguageRef.current}`,
             goal,
             roadmap,
-            session_data: lessonRecords,
+            session_data: { langCode, lessonRecords },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" }
@@ -115,7 +137,7 @@ export default function LanguagePage() {
 
     saveSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goal, roadmap, lessonRecords, started, user, chatTitle, chatDescription]);
+  }, [goal, roadmap, lessonRecords, langCode, started, user, chatTitle, chatDescription]);
 
   function speakWord(text: string) {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
