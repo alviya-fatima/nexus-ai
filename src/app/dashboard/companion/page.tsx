@@ -8,6 +8,18 @@ import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
 import { upsertChat, generateChatMeta, loadSessionRow } from "../../../lib/chats";
 
+
+import { Suspense } from "react";
+
+function CompanionContent() {
+  const searchParams = useSearchParams();
+
+  return (
+    <>
+      {/* your entire page here */}
+    </>
+  );
+}
 type Message = { role: "user" | "assistant"; text: string };
 
 type QAPair = { question: string; answer: string };
@@ -48,7 +60,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-export default function CompanionPage() {
+export default function CompaninonPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
