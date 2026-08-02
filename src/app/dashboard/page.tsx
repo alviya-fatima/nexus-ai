@@ -118,7 +118,7 @@ export default function Dashboard() {
             src={user.photoURL}
             alt="Profile"
             width={140}
-            height={140}
+            height={5}
             unoptimized
             className="profile-picture"
           />
