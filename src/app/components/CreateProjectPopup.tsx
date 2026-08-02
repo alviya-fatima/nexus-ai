@@ -3,9 +3,6 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
-import { auth } from "../firebase/config";
-import { createChat } from "../../lib/chatStorage";
-
 type CreateProjectPopupProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -22,6 +19,7 @@ export default function CreateProjectPopup({
   return (
     <div className="popup-overlay" onClick={onClose}>
       <div className="popup-container" onClick={(e) => e.stopPropagation()}>
+        {/* Popup Background */}
         <Image
           src="/create-popup.png"
           alt="Create Project Popup"
@@ -31,55 +29,64 @@ export default function CreateProjectPopup({
           className="popup-image"
         />
 
+        {/* Button 1 - Career & Skill Learning */}
         <button
           className="popup-btn btn1"
           onClick={() => {
             onClose();
-
-            const uid = auth.currentUser?.uid;
-            if (!uid) {
-              router.push("/");
-              return;
-            }
-
-            const chat = createChat(uid);
-            router.push(`/dashboard/career/${chat.id}`);
+            router.push("/dashboard/career");
           }}
         >
-          <Image
-            src="/btn1.png"
-            alt="Career & Skill Learning"
-            width={260}
-            height={60}
-            priority
-          />
+          <Image src="/btn1.png" alt="Career & Skill Learning" width={260} height={60} priority />
         </button>
 
-        <button className="popup-btn btn2">
-          <Image src="/btn2.png" alt="Button 2" width={260} height={60} priority />
+        {/* Button 2 - Ask & Guide */}
+        <button
+          className="popup-btn btn2"
+          onClick={() => {
+            onClose();
+            router.push("/dashboard/project-studio");
+          }}
+        >
+          <Image src="/btn2.png" alt="Ask & Guide" width={260} height={60} priority />
         </button>
 
-        <button className="popup-btn btn3">
+        {/* Button 3 */}
+        <button
+          className="popup-btn btn3"
+          onClick={() => {
+            onClose();
+            router.push("/dashboard/companion");
+          }}
+        >
           <Image src="/btn3.png" alt="Button 3" width={260} height={60} priority />
         </button>
 
-        <button className="popup-btn btn4">
+        {/* Button 4 */}
+        <button
+          className="popup-btn btn4"
+          onClick={() => {
+            onClose();
+            router.push("/dashboard/language");
+          }}
+        >
           <Image src="/btn4.png" alt="Button 4" width={260} height={60} priority />
         </button>
 
-        <button className="popup-btn btn5">
+        {/* Button 5 */}
+        <button
+          className="popup-btn btn5"
+          onClick={() => {
+            onClose();
+            router.push("/dashboard/task-helper");
+          }}
+        >
           <Image src="/btn5.png" alt="Button 5" width={260} height={60} priority />
         </button>
 
+        {/* Cancel Button */}
         <button className="popup-close-button" onClick={onClose}>
-          <Image
-            src="/cancel-btn.png"
-            alt="Close"
-            width={55}
-            height={55}
-            priority
-            className="cancel-button-image"
-          />
+          <Image src="/cancel-btn.png" alt="Close" width={55} height={55} priority className="cancel-button-image" />
         </button>
       </div>
     </div>
