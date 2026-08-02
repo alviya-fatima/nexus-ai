@@ -58,16 +58,7 @@ export default function Dashboard() {
 
       {!popupOpen && (
         <>
-          <button className="search-button">
-            <Image
-              src="/search-bar.png"
-              alt="Search"
-              width={500}
-              height={70}
-              priority
-              className="search-bar-image"
-            />
-          </button>
+        
 
           <button className="per-growth-button">
             <Image
@@ -79,6 +70,11 @@ export default function Dashboard() {
               className="per-growth-image"
             />
           </button>
+
+          {/* navigate to growth on click */}
+          <style jsx>{``}</style>
+            
+          
 
           <button
             className="create-project-button"
