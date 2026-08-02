@@ -19,9 +19,11 @@ export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const [todayChats, setTodayChats] = useState<ChatSession[]>([]);
-function openChat(chat: ChatEntry) {
-  router.push(`${chat.route}?session=${chat.id}`);
-}
+
+  function openChat(chat: ChatEntry) {
+    router.push(`${chat.route}?session=${chat.id}`);
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
