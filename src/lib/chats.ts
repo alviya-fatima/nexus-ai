@@ -75,3 +75,21 @@ export async function generateChatMeta(
     return { title: "New Chat", description: "" };
   }
 }
+export async function loadSessionRow(table: string, id: string): Promise<any | null> {
+  try {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("loadSessionRow failed:", error.message, error.details, error.hint);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error("loadSessionRow failed:", err);
+    return null;
+  }
+}
