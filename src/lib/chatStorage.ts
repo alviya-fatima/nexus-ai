@@ -11,9 +11,9 @@ export type ChatRoadmap = {
 export type ChatSession = {
   id: string;
   title: string;
-  titleIsAuto: boolean; // false until we've auto-named it from the first prompt
-  createdAt: string; // ISO timestamp
-  updatedAt: string; // ISO timestamp
+  titleIsAuto: boolean;
+  createdAt: string;
+  updatedAt: string;
   messages: ChatMessage[];
   roadmap: ChatRoadmap | null;
 };
@@ -105,7 +105,6 @@ export function deleteChat(uid: string, chatId: string) {
   writeAll(uid, chats);
 }
 
-// Turns a raw prompt/goal into a short, presentable chat title.
 export function makeTitleFromText(text: string): string {
   const cleaned = text.replace(/\s+/g, " ").trim();
   if (!cleaned) return DEFAULT_TITLE;

@@ -5,21 +5,19 @@ import Image from "next/image";
 import dashboard from "../../assets/dashboard.png";
 
 import { auth } from "../firebase/config";
-import {
-  signOut,
-  onAuthStateChanged,
-  User,
-} from "firebase/auth";
+import { signOut, onAuthStateChanged, User } from "firebase/auth";
 
 import { useRouter } from "next/navigation";
 
 import CreateProjectPopup from "../components/CreateProjectPopup";
+import { ChatSession, getChats, isChatFromToday } from "../../lib/chatStorage";
 
 export default function Dashboard() {
   const router = useRouter();
 
   const [user, setUser] = useState<User | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
+  const [todayChats, setTodayChats] = useState<ChatSession[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -33,6 +31,11 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [router]);
 
+  useEffect(() => {
+    if (!user) return;
+    setTodayChats(getChats(user.uid).filter(isChatFromToday));
+  }, [user, popupOpen]);
+
   const logout = async () => {
     try {
       await signOut(auth);
@@ -44,7 +47,6 @@ export default function Dashboard() {
 
   return (
     <main className="dashboard-page">
-
       <Image
         src={dashboard}
         alt="Dashboard"
@@ -94,10 +96,25 @@ export default function Dashboard() {
         </>
       )}
 
-      <CreateProjectPopup
-        isOpen={popupOpen}
-        onClose={() => setPopupOpen(false)}
-      />
+      <CreateProjectPopup isOpen={popupOpen} onClose={() => setPopupOpen(false)} />
+
+      {!popupOpen && todayChats.length > 0 && (
+        <div className="today-chats-panel">
+          <h3 className="today-chats-heading">Today</h3>
+
+          <div className="today-chats-list">
+            {todayChats.map((chat) => (
+              <button
+                key={chat.id}
+                className="today-chat-item"
+                onClick={() => router.push(`/dashboard/career/${chat.id}`)}
+              >
+                {chat.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {user?.photoURL && (
         <div className="profile-container">
@@ -112,10 +129,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <button
-        onClick={logout}
-        className="logout-button"
-      >
+      <button onClick={logout} className="logout-button">
         <Image
           src="/google-logout-btn.png"
           alt="Logout"
@@ -125,7 +139,6 @@ export default function Dashboard() {
           className="logout-button-image"
         />
       </button>
-
     </main>
   );
 }

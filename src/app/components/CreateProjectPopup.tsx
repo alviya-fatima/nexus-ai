@@ -1,82 +1,23 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient";
+
 import { auth } from "../firebase/config";
+import { createChat } from "../../lib/chatStorage";
 
 type CreateProjectPopupProps = {
   isOpen: boolean;
   onClose: () => void;
-  onCreated?: () => void;
 };
 
 export default function CreateProjectPopup({
   isOpen,
   onClose,
-  onCreated,
 }: CreateProjectPopupProps) {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
-
-  const createCareerChat = async () => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) {
-      setError("You must be logged in.");
-      return;
-    }
-    if (!name.trim()) {
-      setError("Please enter a name.");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-
-    try {
-      // 1. Create the underlying task session
-      const { data: session, error: sessionError } = await supabase
-        .from("task_sessions")
-        .insert({
-          user_id: uid,
-          task: "career",
-          goal: name.trim(),
-        })
-        .select()
-        .single();
-
-      if (sessionError || !session) throw sessionError;
-
-      // 2. Create the chat_history entry pointing at it
-      const { error: historyError } = await supabase
-        .from("chat_history")
-        .insert({
-          user_id: uid,
-          feature: "career",
-          title: name.trim(),
-          description: description.trim() || null,
-          session_table: "task_sessions",
-          session_id: session.id,
-        });
-
-      if (historyError) throw historyError;
-
-      onCreated?.();
-      onClose();
-      router.push(`/dashboard/career?session=${session.id}`);
-    } catch (err) {
-      console.error(err);
-      setError("Something went wrong. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <div className="popup-overlay" onClick={onClose}>
@@ -90,29 +31,20 @@ export default function CreateProjectPopup({
           className="popup-image"
         />
 
-        {/* Name / description inputs */}
-        <input
-          type="text"
-          placeholder="Chat name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="popup-input popup-input-name"
-        />
-        <input
-          type="text"
-          placeholder="Short description (optional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className="popup-input popup-input-description"
-        />
-
-        {error && <p className="popup-error">{error}</p>}
-
-        {/* Button 1 - Career & Skill Learning */}
         <button
           className="popup-btn btn1"
-          onClick={createCareerChat}
-          disabled={saving}
+          onClick={() => {
+            onClose();
+
+            const uid = auth.currentUser?.uid;
+            if (!uid) {
+              router.push("/");
+              return;
+            }
+
+            const chat = createChat(uid);
+            router.push(`/dashboard/career/${chat.id}`);
+          }}
         >
           <Image
             src="/btn1.png"
