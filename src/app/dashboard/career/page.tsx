@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import dashboard from "../../assets/dashboard.png";
+import dashboard from "../../../assets/dashboard.png";
 
 import { auth } from "../../firebase/config";
 import { signOut, onAuthStateChanged, User } from "firebase/auth";
