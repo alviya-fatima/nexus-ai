@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -44,7 +44,7 @@ function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export default function LanguagePage() {
+function LanguageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
@@ -605,5 +605,13 @@ export default function LanguagePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LanguagePage() {
+  return (
+    <Suspense fallback={<div className="career-page" />}>
+      <LanguageContent />
+    </Suspense>
   );
 }
