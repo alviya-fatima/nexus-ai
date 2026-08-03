@@ -40,7 +40,7 @@ export default function CreateProjectPopup({
           <Image src="/btn1.png" alt="Career & Skill Learning" width={260} height={60} priority />
         </button>
 
-        {/* Button 2 - Ask & Guide */}
+        {/* Button 2 - Project Studio */}
         <button
           className="popup-btn btn2"
           onClick={() => {
@@ -48,10 +48,10 @@ export default function CreateProjectPopup({
             router.push("/dashboard/project-studio");
           }}
         >
-          <Image src="/btn2.png" alt="Ask & Guide" width={260} height={60} priority />
+          <Image src="/btn2.png" alt="Project Studio" width={260} height={60} priority />
         </button>
 
-        {/* Button 3 */}
+        {/* Button 3 - Companion */}
         <button
           className="popup-btn btn3"
           onClick={() => {
@@ -59,21 +59,21 @@ export default function CreateProjectPopup({
             router.push("/dashboard/companion");
           }}
         >
-          <Image src="/btn3.png" alt="Button 3" width={260} height={60} priority />
+          <Image src="/btn3.png" alt="Companion" width={260} height={60} priority />
         </button>
 
-        {/* Button 4 */}
+        {/* Button 4 - Language */}
         <button
           className="popup-btn btn4"
           onClick={() => {
             onClose();
-            router.push("/dashboard/languge");
+            router.push("/dashboard/language");
           }}
         >
-          <Image src="/btn4.png" alt="Button 4" width={260} height={60} priority />
+          <Image src="/btn4.png" alt="Language" width={260} height={60} priority />
         </button>
 
-        {/* Button 5 */}
+        {/* Button 5 - Task Helper */}
         <button
           className="popup-btn btn5"
           onClick={() => {
@@ -81,7 +81,7 @@ export default function CreateProjectPopup({
             router.push("/dashboard/task-helper");
           }}
         >
-          <Image src="/btn5.png" alt="Button 5" width={260} height={60} priority />
+          <Image src="/btn5.png" alt="Task Helper" width={260} height={60} priority />
         </button>
 
         {/* Cancel Button */}
