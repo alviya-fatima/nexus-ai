@@ -1,71 +1,73 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import { jsPDF } from "jspdf";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
 import { upsertChat, generateChatMeta, loadSessionRow } from "../../../lib/chats";
 
-type Lesson = {
+type BudgetItem = {
+  item: string;
+  cheapOption: string;
+  estimatedCost: string;
+  whereToBuy: string;
+};
+
+type ResearchSource = {
+  name: string;
+  url: string;
+  whatYoullFind: string;
+};
+
+type Plan = {
   title: string;
-  whatYouLearn: string;
-  whyImportant: string;
-  whatToDo: string[];
+  summary: string;
+  budgetOptions: BudgetItem[];
+  stepByStep: string[];
+  researchSources: ResearchSource[];
+  researchSummary: string;
+  designIdeas: string[];
 };
 
-type Attachment =
-  | { id: string; kind: "image"; dataUrl: string; name: string }
-  | { id: string; kind: "link"; url: string };
+type ChatEntry = { question: string; answer: string };
 
-type ChatEntry = {
-  question: string;
-  answer: string;
-  attachments?: Attachment[];
-};
-
-type StepRecord = {
-  index: number;
-  lesson: Lesson;
-  chat: ChatEntry[];
+type DesignImageState = {
+  loading: boolean;
+  dataUrl: string | null;
+  error: string | null;
 };
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export default function TaskHelperPage() {
+function ProjectStudioContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
 
-  const [taskInput, setTaskInput] = useState("");
+  const [brief, setBrief] = useState("");
+  const [requirements, setRequirements] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [goal, setGoal] = useState("");
-  const [steps, setSteps] = useState<string[]>([]);
-  const [stepRecords, setStepRecords] = useState<StepRecord[]>([]);
-  const [lessonLoading, setLessonLoading] = useState(false);
-  const [finished, setFinished] = useState(false);
-  const [usedMemory, setUsedMemory] = useState(false);
-
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [chat, setChat] = useState<ChatEntry[]>([]);
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [linkInputOpen, setLinkInputOpen] = useState(false);
-  const [linkDraft, setLinkDraft] = useState("");
+
+  const [designImages, setDesignImages] = useState<DesignImageState[]>([]);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const [chatTitle, setChatTitle] = useState("");
   const [chatDescription, setChatDescription] = useState("");
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionIdRef = useRef<string>(makeId());
-  const originalTaskRef = useRef<string>("");
   const loadedSessionRef = useRef(false);
 
-  const started = steps.length > 0;
-  const activeStepIndex = stepRecords.length - 1;
+  const started = !!plan;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -89,15 +91,22 @@ export default function TaskHelperPage() {
     loadSessionRow("task_sessions", sessionId).then((row) => {
       if (!row) return;
       sessionIdRef.current = row.id;
-      originalTaskRef.current = row.task || "";
-      setGoal(row.goal || "");
-      setSteps(row.roadmap || []);
-      setStepRecords(row.session_data || []);
+      setBrief(row.task || "");
+      setPlan(row.session_data?.plan || null);
+      setChat(row.session_data?.chat || []);
+      const designCount = row.session_data?.plan?.designIdeas?.length || 0;
+      setDesignImages(
+        new Array(designCount).fill(null).map(() => ({
+          loading: false,
+          dataUrl: null,
+          error: null,
+        }))
+      );
     });
   }, [user, searchParams]);
 
   useEffect(() => {
-    if (!started || !user) return;
+    if (!plan || !user) return;
 
     const saveSession = async () => {
       try {
@@ -105,10 +114,10 @@ export default function TaskHelperPage() {
           {
             id: sessionIdRef.current,
             user_id: user.uid,
-            task: originalTaskRef.current,
-            goal,
-            roadmap: steps,
-            session_data: stepRecords,
+            task: brief,
+            goal: plan.title,
+            roadmap: plan.stepByStep,
+            session_data: { plan, chat },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" }
@@ -117,10 +126,10 @@ export default function TaskHelperPage() {
         await upsertChat({
           id: sessionIdRef.current,
           userId: user.uid,
-          feature: "task-helper",
-          title: chatTitle || goal || originalTaskRef.current || "New chat",
+          feature: "project-studio",
+          title: chatTitle || plan.title || brief || "New chat",
           description: chatDescription,
-          route: "/dashboard/task-helper",
+          route: "/dashboard/project-studio",
         });
       } catch (error) {
         console.error("Supabase save failed:", error);
@@ -129,33 +138,32 @@ export default function TaskHelperPage() {
 
     saveSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goal, steps, stepRecords, started, user, chatTitle, chatDescription]);
+  }, [plan, chat, user, chatTitle, chatDescription]);
 
-  async function generateTask() {
-    if (!taskInput.trim() || loading) return;
+  async function generatePlan() {
+    if (!brief.trim() || !requirements.trim() || loading) return;
     setLoading(true);
-    originalTaskRef.current = taskInput;
 
     try {
-      const res = await fetch("/api/task-helper", {
+      const res = await fetch("/api/project-studio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "start",
-          taskDescription: taskInput,
+          brief,
+          requirements,
           userId: user?.uid,
         }),
       });
 
-      const data = await res.json();
+      const data: Plan = await res.json();
+      setPlan(data);
+      setDesignImages(
+        data.designIdeas.map(() => ({ loading: false, dataUrl: null, error: null }))
+      );
+      setChat([]);
 
-      setGoal(data.goal);
-      setSteps(data.steps);
-      setStepRecords([{ index: 0, lesson: data.lesson, chat: [] }]);
-      setFinished(false);
-      setUsedMemory(!!data.usedMemory);
-
-      generateChatMeta(taskInput).then(({ title, description }) => {
+      generateChatMeta(brief).then(({ title, description }) => {
         setChatTitle(title);
         setChatDescription(description);
       });
@@ -166,95 +174,27 @@ export default function TaskHelperPage() {
     setLoading(false);
   }
 
-  function handleFilesSelected(fileList: FileList | null) {
-    if (!fileList) return;
-
-    Array.from(fileList).forEach((file) => {
-      if (!file.type.startsWith("image/")) return;
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        setAttachments((prev) => [
-          ...prev,
-          { id: makeId(), kind: "image", dataUrl, name: file.name },
-        ]);
-      };
-      reader.readAsDataURL(file);
-    });
-
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-
-  function addLinkAttachment() {
-    const trimmed = linkDraft.trim();
-    if (!trimmed) return;
-
-    setAttachments((prev) => [
-      ...prev,
-      { id: makeId(), kind: "link", url: trimmed },
-    ]);
-    setLinkDraft("");
-    setLinkInputOpen(false);
-  }
-
-  function removeAttachment(id: string) {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
-  }
-
   async function askQuestion() {
-    if ((!question.trim() && attachments.length === 0) || asking || activeStepIndex < 0)
-      return;
+    if (!question.trim() || asking || !plan) return;
 
-    const activeLesson = stepRecords[activeStepIndex].lesson;
     const askedQuestion = question;
-    const askedAttachments = attachments;
-
-    const imagePayload = askedAttachments
-      .filter((a): a is Extract<Attachment, { kind: "image" }> => a.kind === "image")
-      .map((a) => a.dataUrl);
-
-    const linkPayload = askedAttachments
-      .filter((a): a is Extract<Attachment, { kind: "link" }> => a.kind === "link")
-      .map((a) => a.url);
-
     setQuestion("");
-    setAttachments([]);
     setAsking(true);
 
     try {
-      const res = await fetch("/api/task-helper", {
+      const res = await fetch("/api/project-studio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "question",
-          lessonTitle: activeLesson.title,
-          question: askedQuestion || "(see attached image/link)",
-          images: imagePayload,
-          links: linkPayload,
+          title: plan.title,
+          question: askedQuestion,
           userId: user?.uid,
         }),
       });
 
       const data = await res.json();
-
-      setStepRecords((prev) =>
-        prev.map((step, i) =>
-          i === activeStepIndex
-            ? {
-                ...step,
-                chat: [
-                  ...step.chat,
-                  {
-                    question: askedQuestion,
-                    answer: data.reply ?? "",
-                    attachments: askedAttachments,
-                  },
-                ],
-              }
-            : step
-        )
-      );
+      setChat((prev) => [...prev, { question: askedQuestion, answer: data.reply ?? "" }]);
     } catch (error) {
       console.error(error);
     }
@@ -262,93 +202,116 @@ export default function TaskHelperPage() {
     setAsking(false);
   }
 
-  async function markDone() {
-    if (lessonLoading || activeStepIndex < 0) return;
+  async function generateDesignImage(index: number) {
+    if (!plan) return;
 
-    const nextIndex = activeStepIndex + 1;
-
-    if (nextIndex >= steps.length) {
-      setFinished(true);
-      return;
-    }
-
-    setLessonLoading(true);
+    setDesignImages((prev) =>
+      prev.map((d, i) => (i === index ? { ...d, loading: true, error: null } : d))
+    );
 
     try {
-      const res = await fetch("/api/task-helper", {
+      const res = await fetch("/api/project-studio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode: "step",
-          goal,
-          steps,
-          stepIndex: nextIndex,
-          userId: user?.uid,
+          mode: "generate_image",
+          prompt: plan.designIdeas[index],
         }),
       });
 
       const data = await res.json();
 
-      setStepRecords((prev) => [
-        ...prev,
-        { index: nextIndex, lesson: data.lesson, chat: [] },
-      ]);
+      if (!res.ok) {
+        setDesignImages((prev) =>
+          prev.map((d, i) =>
+            i === index ? { ...d, loading: false, error: data.error ?? "Failed to generate image." } : d
+          )
+        );
+        return;
+      }
+
+      setDesignImages((prev) =>
+        prev.map((d, i) => (i === index ? { loading: false, dataUrl: data.imageDataUrl, error: null } : d))
+      );
+    } catch (error) {
+      console.error(error);
+      setDesignImages((prev) =>
+        prev.map((d, i) => (i === index ? { ...d, loading: false, error: "Failed to generate image." } : d))
+      );
+    }
+  }
+
+  async function downloadPdf() {
+    if (!plan) return;
+    setGeneratingPdf(true);
+
+    try {
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 40;
+      const maxWidth = pageWidth - margin * 2;
+      let y = 50;
+
+      function addWrapped(text: string, fontSize: number, bold = false) {
+        doc.setFontSize(fontSize);
+        doc.setFont("helvetica", bold ? "bold" : "normal");
+        const lines = doc.splitTextToSize(text, maxWidth);
+        lines.forEach((line: string) => {
+          if (y > 780) {
+            doc.addPage();
+            y = 50;
+          }
+          doc.text(line, margin, y);
+          y += fontSize * 1.3;
+        });
+        y += 6;
+      }
+
+      addWrapped(plan.title, 20, true);
+      addWrapped(plan.summary, 11);
+
+      addWrapped("Budget-Friendly Materials", 14, true);
+      plan.budgetOptions.forEach((b) => {
+        addWrapped(
+          `• ${b.item}: ${b.cheapOption} (~${b.estimatedCost}) — ${b.whereToBuy}`,
+          10
+        );
+      });
+
+      addWrapped("Step-by-Step Guide", 14, true);
+      plan.stepByStep.forEach((s, i) => {
+        addWrapped(`${i + 1}. ${s}`, 10);
+      });
+
+      addWrapped("Research Sources", 14, true);
+      plan.researchSources.forEach((r) => {
+        addWrapped(`• ${r.name} (${r.url}) — ${r.whatYoullFind}`, 10);
+      });
+
+      addWrapped("Research Summary", 14, true);
+      addWrapped(plan.researchSummary, 10);
+
+      const generatedDesigns = designImages.filter((d) => d.dataUrl);
+      if (generatedDesigns.length > 0) {
+        addWrapped("Design Concepts", 14, true);
+        for (const design of generatedDesigns) {
+          if (y > 550) {
+            doc.addPage();
+            y = 50;
+          }
+          if (design.dataUrl) {
+            doc.addImage(design.dataUrl, "PNG", margin, y, 240, 240);
+            y += 260;
+          }
+        }
+      }
+
+      doc.save(`${plan.title.replace(/[^\w\s-]/g, "").trim() || "project-summary"}.pdf`);
     } catch (error) {
       console.error(error);
     }
 
-    setLessonLoading(false);
-  }
-
-  function downloadSummary() {
-    const lines: string[] = [];
-    lines.push(`GOAL: ${goal}`);
-    lines.push("");
-    lines.push("FULL PLAN:");
-    steps.forEach((step, i) => {
-      lines.push(`${i + 1}. ${step}`);
-    });
-    lines.push("");
-    lines.push("=".repeat(60));
-    lines.push("");
-
-    stepRecords.forEach((record) => {
-      lines.push(`STEP ${record.index + 1}: ${record.lesson.title}`);
-      lines.push("");
-      lines.push("What You'll Learn:");
-      lines.push(record.lesson.whatYouLearn);
-      lines.push("");
-      lines.push("Why It's Important:");
-      lines.push(record.lesson.whyImportant);
-      lines.push("");
-      lines.push("What To Do:");
-      record.lesson.whatToDo.forEach((task, i) => {
-        lines.push(`  ${i + 1}. ${task}`);
-      });
-
-      if (record.chat.length > 0) {
-        lines.push("");
-        lines.push("Q&A for this step:");
-        record.chat.forEach((entry) => {
-          lines.push(`  Q: ${entry.question}`);
-          lines.push(`  A: ${entry.answer}`);
-        });
-      }
-
-      lines.push("");
-      lines.push("-".repeat(60));
-      lines.push("");
-    });
-
-    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${goal.replace(/[^\w\s-]/g, "").trim() || "task-summary"}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setGeneratingPdf(false);
   }
 
   return (
@@ -362,7 +325,7 @@ export default function TaskHelperPage() {
 
       <Image
         src="/chat-area-v2.png"
-        alt="Task Helper Background"
+        alt="Project Studio Background"
         fill
         priority
         className="career-background"
@@ -372,276 +335,172 @@ export default function TaskHelperPage() {
         <div className="career-container">
           {!started && (
             <div className="skill-screen">
-              <h1>What do you need help with?</h1>
-              <p className="skill-subtitle">Ask NEXUS AI anything.</p>
+              <h1>What do you want to make?</h1>
+              <p className="skill-subtitle">
+                Tell NEXUS AI what you're building or presenting — it'll plan
+                the whole thing: cheap materials, step-by-step build
+                instructions, research, design concepts, and a downloadable
+                PDF summary.
+              </p>
 
+              <p className="step-ask-box-label">What is it, and what's the situation?</p>
               <textarea
-                value={taskInput}
-                placeholder="Example: How do I make a LinkedIn account?"
-                onChange={(e) => setTaskInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    generateTask();
-                  }
-                }}
+                value={brief}
+                placeholder="Example: I have a math presentation due in 3 days and haven't started..."
+                onChange={(e) => setBrief(e.target.value)}
+              />
+
+              <p className="step-ask-box-label">What requirements does it have to match?</p>
+              <textarea
+                value={requirements}
+                placeholder="Example: Must be 10 minutes long, cover derivatives, include a visual aid, budget under $20..."
+                onChange={(e) => setRequirements(e.target.value)}
               />
 
               <button
                 className="primary-button"
-                onClick={generateTask}
+                onClick={generatePlan}
                 disabled={loading}
               >
-                {loading ? "Generating..." : "🚀 Generate Plan"}
+                {loading ? "Planning..." : "🚀 Generate Plan"}
               </button>
             </div>
           )}
 
-          {started && (
+          {started && plan && (
             <>
               <div className="roadmap-card">
-                <h1>🎯 {goal}</h1>
-                <h2>🗺️ Your Full Plan</h2>
-                <p className="roadmap-intro">
-                  Here's everything you'll work through, step by step, to get
-                  there 👇
-                  {usedMemory && (
-                    <span className="memory-note">
-                      {" "}
-                      🧠 Personalized using what NEXUS AI remembers about you.
-                    </span>
-                  )}
-                </p>
-
-                <div className="roadmap-list">
-                  {steps.map((step, index) => (
-                    <div
-                      key={index}
-                      className={`roadmap-step ${
-                        index === activeStepIndex ? "roadmap-step-active" : ""
-                      }`}
-                    >
-                      {index < activeStepIndex
-                        ? "✅"
-                        : index === activeStepIndex
-                        ? "▶️"
-                        : "⬜"}{" "}
-                      {step}
-                    </div>
-                  ))}
-                </div>
-
-                <button className="secondary-button" onClick={downloadSummary}>
-                  ⬇️ Download Summary (.txt)
+                <h1>🎯 {plan.title}</h1>
+                <p className="roadmap-intro">{plan.summary}</p>
+                <button
+                  className="secondary-button"
+                  onClick={downloadPdf}
+                  disabled={generatingPdf}
+                >
+                  {generatingPdf ? "Building PDF..." : "📄 Download PDF Summary"}
                 </button>
               </div>
 
               <div className="lesson-feed-card">
                 <div className="steps-feed">
-                  {stepRecords.map((step, i) => {
-                    const isActive = i === activeStepIndex;
+                  <div className="step-lesson-box">
+                    <h2>💰 Budget-Friendly Materials</h2>
+                    <div className="lesson-bubble bubble-learn">
+                      <ul>
+                        {plan.budgetOptions.map((b, i) => (
+                          <li key={i}>
+                            <strong>{b.item}:</strong> {b.cheapOption} (~{b.estimatedCost}) —{" "}
+                            {b.whereToBuy}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
 
-                    return (
-                      <div key={step.index} className="step-block">
-                        <div className="step-lesson-box">
-                          <h2>
-                            📚 Step {step.index + 1}: {step.lesson.title}
-                          </h2>
+                    <h2>🛠️ Step-by-Step Guide</h2>
+                    <div className="lesson-bubble bubble-todo">
+                      <ul>
+                        {plan.stepByStep.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
 
-                          <div className="lesson-bubble bubble-learn">
-                            <h3>📖 What You'll Learn</h3>
-                            <p>{step.lesson.whatYouLearn}</p>
-                          </div>
+                    <h2>🔍 Research Sources</h2>
+                    <div className="lesson-bubble bubble-why">
+                      <ul>
+                        {plan.researchSources.map((r, i) => (
+                          <li key={i}>
+                            <a
+                              href={
+                                r.url.startsWith("http") ? r.url : `https://${r.url}`
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="gpt-attachment-link"
+                            >
+                              {r.name}
+                            </a>{" "}
+                            — {r.whatYoullFind}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
 
-                          <div className="lesson-bubble bubble-why">
-                            <h3>💡 Why It's Important</h3>
-                            <p>{step.lesson.whyImportant}</p>
-                          </div>
+                    <h2>📚 Research Summary</h2>
+                    <div className="lesson-bubble bubble-learn">
+                      <p>{plan.researchSummary}</p>
+                    </div>
 
-                          <div className="lesson-bubble bubble-todo">
-                            <h3>📝 What To Do</h3>
-                            <ul>
-                              {step.lesson.whatToDo.map((task, index) => (
-                                <li key={index}>{task}</li>
-                              ))}
-                            </ul>
-                          </div>
+                    <h2>🎨 Design Concepts</h2>
+                    <div className="vocab-grid">
+                      {plan.designIdeas.map((idea, i) => (
+                        <div key={i} className="vocab-card">
+                          <div className="vocab-meaning">{idea}</div>
+                          {designImages[i]?.dataUrl ? (
+                            <img
+                              src={designImages[i].dataUrl!}
+                              alt={idea}
+                              className="design-generated-image"
+                            />
+                          ) : (
+                            <button
+                              className="vocab-play-button"
+                              onClick={() => generateDesignImage(i)}
+                              disabled={designImages[i]?.loading}
+                            >
+                              {designImages[i]?.loading
+                                ? "Generating..."
+                                : "🎨 Generate Image"}
+                            </button>
+                          )}
+                          {designImages[i]?.error && (
+                            <p className="quiz-explanation">
+                              ⚠️ {designImages[i].error}
+                            </p>
+                          )}
                         </div>
+                      ))}
+                    </div>
+                  </div>
 
-                        <div className="step-ask-box">
-                          <h3 className="ask-heading">
-                            💬 Ask anything about Step {step.index + 1}
-                          </h3>
+                  <div className="step-ask-box">
+                    <h3 className="ask-heading">💬 Ask anything about this plan</h3>
 
-                          {step.chat.length > 0 && (
-                            <div className="gpt-thread">
-                              {step.chat.map((entry, index) => (
-                                <div key={index} className="gpt-exchange">
-                                  <div className="gpt-msg gpt-msg-user">
-                                    {entry.attachments &&
-                                      entry.attachments.length > 0 && (
-                                        <div className="gpt-attachments">
-                                          {entry.attachments.map((att) =>
-                                            att.kind === "image" ? (
-                                              <img
-                                                key={att.id}
-                                                src={att.dataUrl}
-                                                alt={att.name}
-                                                className="gpt-attachment-image"
-                                              />
-                                            ) : (
-                                              <a
-                                                key={att.id}
-                                                href={att.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="gpt-attachment-link"
-                                              >
-                                                🔗 {att.url}
-                                              </a>
-                                            )
-                                          )}
-                                        </div>
-                                      )}
-                                    {entry.question && <p>{entry.question}</p>}
-                                  </div>
-
-                                  <div className="gpt-msg gpt-msg-assistant">
-                                    <span className="gpt-avatar">🤖</span>
-                                    <p>{entry.answer}</p>
-                                  </div>
-                                </div>
-                              ))}
+                    {chat.length > 0 && (
+                      <div className="gpt-thread">
+                        {chat.map((entry, i) => (
+                          <div key={i} className="gpt-exchange">
+                            <div className="gpt-msg gpt-msg-user">
+                              <p>{entry.question}</p>
                             </div>
-                          )}
-
-                          {isActive && (
-                            <>
-                              {attachments.length > 0 && (
-                                <div className="composer-attachments">
-                                  {attachments.map((att) => (
-                                    <div key={att.id} className="composer-chip">
-                                      {att.kind === "image" ? (
-                                        <img
-                                          src={att.dataUrl}
-                                          alt={att.name}
-                                          className="composer-chip-image"
-                                        />
-                                      ) : (
-                                        <span className="composer-chip-link">
-                                          🔗 {att.url}
-                                        </span>
-                                      )}
-                                      <button
-                                        className="composer-chip-remove"
-                                        onClick={() => removeAttachment(att.id)}
-                                        aria-label="Remove attachment"
-                                      >
-                                        ✕
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {linkInputOpen && (
-                                <div className="link-input-row">
-                                  <input
-                                    type="text"
-                                    value={linkDraft}
-                                    placeholder="Paste a link..."
-                                    onChange={(e) =>
-                                      setLinkDraft(e.target.value)
-                                    }
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        addLinkAttachment();
-                                      }
-                                    }}
-                                  />
-                                  <button onClick={addLinkAttachment}>
-                                    Add
-                                  </button>
-                                </div>
-                              )}
-
-                              <textarea
-                                value={question}
-                                placeholder={`Ask about Step ${
-                                  step.index + 1
-                                }...`}
-                                onChange={(e) => setQuestion(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" && !e.shiftKey) {
-                                    e.preventDefault();
-                                    askQuestion();
-                                  }
-                                }}
-                              />
-
-                              <div className="composer-toolbar">
-                                <input
-                                  ref={fileInputRef}
-                                  type="file"
-                                  accept="image/*"
-                                  multiple
-                                  hidden
-                                  onChange={(e) =>
-                                    handleFilesSelected(e.target.files)
-                                  }
-                                />
-                                <button
-                                  type="button"
-                                  className="icon-button"
-                                  onClick={() => fileInputRef.current?.click()}
-                                  title="Upload image"
-                                >
-                                  📷 Image
-                                </button>
-                                <button
-                                  type="button"
-                                  className="icon-button"
-                                  onClick={() => setLinkInputOpen((v) => !v)}
-                                  title="Add link"
-                                >
-                                  🔗 Link
-                                </button>
-
-                                <button
-                                  className="secondary-button"
-                                  onClick={askQuestion}
-                                  disabled={asking}
-                                >
-                                  {asking ? "Thinking..." : "Ask NEXUS AI"}
-                                </button>
-                              </div>
-
-                              {finished ? (
-                                <p className="finished-text">
-                                  🎉 You've completed every step of this task!
-                                </p>
-                              ) : (
-                                <button
-                                  className="done-button"
-                                  onClick={markDone}
-                                  disabled={lessonLoading}
-                                >
-                                  {lessonLoading
-                                    ? "Loading next step..."
-                                    : "✅ Done — Next Step"}
-                                </button>
-                              )}
-                            </>
-                          )}
-                        </div>
-
-                        {i < stepRecords.length - 1 && (
-                          <hr className="step-divider" />
-                        )}
+                            <div className="gpt-msg gpt-msg-assistant">
+                              <span className="gpt-avatar">🤖</span>
+                              <p>{entry.answer}</p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    );
-                  })}
+                    )}
+
+                    <textarea
+                      value={question}
+                      placeholder="Ask about this plan..."
+                      onChange={(e) => setQuestion(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          askQuestion();
+                        }
+                      }}
+                    />
+                    <button
+                      className="secondary-button"
+                      onClick={askQuestion}
+                      disabled={asking}
+                    >
+                      {asking ? "Thinking..." : "Ask NEXUS AI"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </>
@@ -649,5 +508,13 @@ export default function TaskHelperPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function ProjectStudioPage() {
+  return (
+    <Suspense fallback={<div className="career-page" />}>
+      <ProjectStudioContent />
+    </Suspense>
   );
 }
