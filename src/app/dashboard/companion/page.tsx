@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -8,18 +8,6 @@ import { auth } from "../../firebase/config";
 import { supabase } from "../../../lib/supabaseClient";
 import { upsertChat, generateChatMeta, loadSessionRow } from "../../../lib/chats";
 
-
-import { Suspense } from "react";
-
-function CompanionContent() {
-  const searchParams = useSearchParams();
-
-  return (
-    <>
-      {/* your entire page here */}
-    </>
-  );
-}
 type Message = { role: "user" | "assistant"; text: string };
 
 type QAPair = { question: string; answer: string };
@@ -60,7 +48,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-export default function CompaninonPage() {
+function CompanionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
@@ -882,5 +870,13 @@ export default function CompaninonPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function CompanionPage() {
+  return (
+    <Suspense fallback={<div className="career-page" />}>
+      <CompanionContent />
+    </Suspense>
   );
 }
